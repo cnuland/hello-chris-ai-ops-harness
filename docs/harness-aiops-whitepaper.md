@@ -72,7 +72,7 @@ Modern cloud-native systems introduce pressures that make this verification esse
 
 These pressures exceed what human operators can handle. AIOps represents a shift from **visibility to understanding to action** -- and that progression demands not just better models, but better methods for evaluating whether those models are trustworthy.
 
-**TL;DR:** AIOps has evolved from static thresholds to ML-based anomaly detection to LLM-powered causal reasoning. Each generation is more capable, but also harder to verify. That's the problem we're solving.
+**Summary:** AIOps has evolved from static thresholds to ML-based anomaly detection to LLM-powered causal reasoning. Each generation is more capable, but also harder to verify -- and that's the problem we're solving.
 
 ## 1.2 Limits of Current AIOps
 
@@ -120,7 +120,7 @@ The harness must exist **outside** the AI system it evaluates. This isn't a conv
 - **Audit-grade provenance.** Immutable run bundles provide evidence artifacts required by compliance frameworks including SOC 2, FedRAMP, ISO/IEC 42001, and the EU AI Act.
 - **Cross-model comparability.** The same harness can evaluate different models, prompt strategies, or tool configurations, letting you make data-driven selections based on measured performance.
 
-**TL;DR:** The harness is external so that evaluation is unbiased, regression-testable, safety-constrained, auditable, and model-agnostic. If the AI grades its own homework, the grades are meaningless.
+**Summary:** The harness is external so that evaluation is unbiased, regression-testable, safety-constrained, auditable, and model-agnostic. If the AI grades its own homework, the grades are meaningless.
 
 ---
 
@@ -157,7 +157,7 @@ Together, these four artifacts create a **replayable operational record**. Any s
 
 Each harness scenario is declared in a **HarnessManifest**, a versioned YAML document that specifies the system under test, the fault scenario (type, target, parameters, duration), evidence capture configuration, agent invocation parameters, and the scoring rubric. The manifest is the single source of truth for a scenario and enables exact reproduction of any previous evaluation.
 
-**TL;DR:** The harness contract defines *what* each component must provide. The run bundle gives you four artifacts that capture the complete evaluation. The manifest declares *what to test* as versioned YAML.
+**Summary:** The harness contract defines *what* each component must provide. The run bundle gives you four artifacts that capture the complete evaluation, and the manifest declares *what to test* as versioned YAML.
 
 ---
 
@@ -381,7 +381,7 @@ Llama Stack [29], Meta's open framework for building AI applications, provides a
 
 For the harness-first architecture, Llama Stack provides the agent runtime that executes tool-mediated investigations. The agent's tool schemas map to the operational data sources, and the framework's built-in monitoring captures the complete tool-call sequence for inclusion in `aiops_output.json`. This means the harness doesn't need to implement agent runtime infrastructure from scratch -- it leverages Llama Stack's existing lifecycle management while maintaining full visibility into the agent's investigative process.
 
-**TL;DR:** Instead of dumping raw telemetry into the LLM, we give it structured tools to query what it needs. Every query is logged. This makes the reasoning auditable and the evidence verifiable.
+**Summary:** Instead of dumping raw telemetry into the LLM, we give it structured tools to query what it needs. Every query is logged, making the reasoning auditable and the evidence verifiable.
 
 ---
 
@@ -465,7 +465,7 @@ The harness-first architecture addresses these requirements through four mechani
 
 For regulated industries, the absence of these capabilities isn't just a best-practice gap. It's a compliance barrier.
 
-**TL;DR:** If your AI changes production, you need an audit trail. Run bundles provide it. Evidence pointers prove the reasoning was grounded. External independence proves the evaluation was honest.
+**Summary:** If your AI changes production, you need an audit trail. Run bundles provide it, evidence pointers prove the reasoning was grounded, and external independence proves the evaluation was honest.
 
 ---
 
@@ -502,7 +502,7 @@ The feedback loop operates at three timescales:
 
 When implemented within OpenShift AI, this feedback loop operates within the same governed infrastructure as the production AIOps system. Trust grows through **measured, documented, continuously validated correctness**.
 
-**TL;DR:** Every harness run produces scoring data that drives model improvement. The maturity model provides four stages from observation to bounded autonomy, each justified by accumulated scores.
+**Summary:** Every harness run produces scoring data that drives model improvement. The maturity model provides four stages from observation to bounded autonomy, each justified by accumulated scores.
 
 ---
 
