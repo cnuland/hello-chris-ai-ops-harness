@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Score",
+  "description": "Multi-dimensional scoring rubric results",
+  "type": "object",
+  "required": ["category_scores", "weighted_score", "result"],
+  "properties": {
+    "category_scores": {
+      "type": "object",
+      "required": ["detection", "correlation", "rca", "action_safety", "auditability"],
+      "properties": {
+        "detection": { "type": "number", "minimum": 0, "maximum": 1 },
+        "correlation": { "type": "number", "minimum": 0, "maximum": 1 },
+        "rca": { "type": "number", "minimum": 0, "maximum": 1 },
+        "action_safety": { "type": "number", "minimum": 0, "maximum": 1 },
+        "auditability": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "weights": {
+      "type": "object",
+      "description": "Scoring dimension weights"
+    },
+    "weighted_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Weighted composite score"
+    },
+    "pass_threshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "result": {
+      "type": "string",
+      "enum": ["PASS", "FAIL"]
+    },
+    "scoring_rubric_version": {
+      "type": "string"
+    }
+  }
+}

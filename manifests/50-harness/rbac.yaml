@@ -1,0 +1,158 @@
+# ServiceAccount for the harness runner and tools server
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aiops-harness-runner
+  namespace: aiops-harness
+---
+# ServiceAccount for the tools server
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aiops-tools-server
+  namespace: aiops-harness
+---
+# Role: read pods/events/deployments in bookinfo namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bookinfo-reader
+  namespace: bookinfo
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events", "services", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+# Role: mutate deployments in bookinfo (for fault injection)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bookinfo-injector
+  namespace: bookinfo
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/exec"]
+    verbs: ["get", "list", "create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods/ephemeralcontainers"]
+    verbs: ["get", "list", "create", "patch", "update"]
+---
+# Role: read/write in aiops-harness namespace (artifacts, configmaps)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: harness-workspace
+  namespace: aiops-harness
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "pods", "pods/log", "events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+---
+# Bind harness-runner SA to bookinfo-reader
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harness-runner-bookinfo-reader
+  namespace: bookinfo
+subjects:
+  - kind: ServiceAccount
+    name: aiops-harness-runner
+    namespace: aiops-harness
+roleRef:
+  kind: Role
+  name: bookinfo-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# Bind harness-runner SA to bookinfo-injector
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harness-runner-bookinfo-injector
+  namespace: bookinfo
+subjects:
+  - kind: ServiceAccount
+    name: aiops-harness-runner
+    namespace: aiops-harness
+roleRef:
+  kind: Role
+  name: bookinfo-injector
+  apiGroup: rbac.authorization.k8s.io
+---
+# Bind harness-runner SA to harness-workspace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harness-runner-workspace
+  namespace: aiops-harness
+subjects:
+  - kind: ServiceAccount
+    name: aiops-harness-runner
+    namespace: aiops-harness
+roleRef:
+  kind: Role
+  name: harness-workspace
+  apiGroup: rbac.authorization.k8s.io
+---
+# Bind tools-server SA to bookinfo-reader
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tools-server-bookinfo-reader
+  namespace: bookinfo
+subjects:
+  - kind: ServiceAccount
+    name: aiops-tools-server
+    namespace: aiops-harness
+roleRef:
+  kind: Role
+  name: bookinfo-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# ClusterRole: read metrics from Prometheus/Thanos (needed by tools server)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aiops-prometheus-reader
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  - nonResourceURLs: ["/api/v1/query", "/api/v1/query_range", "/metrics", "/federate"]
+    verbs: ["get"]
+---
+# Bind tools-server to prometheus-reader
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: aiops-tools-server-prometheus-reader
+subjects:
+  - kind: ServiceAccount
+    name: aiops-tools-server
+    namespace: aiops-harness
+roleRef:
+  kind: ClusterRole
+  name: aiops-prometheus-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# Bind tools-server to cluster monitoring view (built-in OpenShift role)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: aiops-tools-server-cluster-monitoring-view
+subjects:
+  - kind: ServiceAccount
+    name: aiops-tools-server
+    namespace: aiops-harness
+roleRef:
+  kind: ClusterRole
+  name: cluster-monitoring-view
+  apiGroup: rbac.authorization.k8s.io

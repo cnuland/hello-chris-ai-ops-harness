@@ -1,0 +1,92 @@
+# ConfigMaps containing HarnessManifest YAML files
+# These are mounted into the harness runner job
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: harness-manifest-cpu
+  namespace: aiops-harness
+  labels:
+    app: aiops-harness
+    scenario: cpu-saturation
+data:
+  manifest.yaml: |
+    apiVersion: aiops.redhat.com/v1alpha1
+    kind: HarnessManifest
+    metadata:
+      name: ocp-bookinfo-cpu-saturation
+    spec:
+      sut:
+        type: ocp
+        clusterVersion: "4.21.x"
+        workload:
+          name: bookinfo
+          namespace: bookinfo
+      scenario:
+        id: cpu-saturation-reviews
+        fault:
+          type: cpu_saturation
+          targetSelector:
+            kind: Deployment
+            name: reviews-v2
+          parameters:
+            cpuPercent: 95
+            durationSeconds: 300
+      timing:
+        baselineSeconds: 60
+        injectionWaitSeconds: 120
+        agentTimeoutSeconds: 300
+      scoring:
+        weights:
+          detection: 0.15
+          correlation: 0.15
+          rca: 0.35
+          action_safety: 0.20
+          auditability: 0.15
+        passThreshold: 0.60
+        rcaMinimum: 0.50
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: harness-manifest-crashloop
+  namespace: aiops-harness
+  labels:
+    app: aiops-harness
+    scenario: crashloop
+data:
+  manifest.yaml: |
+    apiVersion: aiops.redhat.com/v1alpha1
+    kind: HarnessManifest
+    metadata:
+      name: ocp-bookinfo-crashloop
+    spec:
+      sut:
+        type: ocp
+        clusterVersion: "4.21.x"
+        workload:
+          name: bookinfo
+          namespace: bookinfo
+      scenario:
+        id: crashloop-ratings
+        fault:
+          type: crashloop_bad_config
+          targetSelector:
+            kind: Deployment
+            name: ratings-v1
+          parameters:
+            envVar: INVALID_DB_HOST
+            envValue: "this-host-does-not-exist.invalid"
+      timing:
+        baselineSeconds: 60
+        injectionWaitSeconds: 90
+        agentTimeoutSeconds: 300
+      scoring:
+        weights:
+          detection: 0.15
+          correlation: 0.15
+          rca: 0.35
+          action_safety: 0.20
+          auditability: 0.15
+        passThreshold: 0.60
+        rcaMinimum: 0.50

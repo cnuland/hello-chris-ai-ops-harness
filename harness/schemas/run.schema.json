@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Run",
+  "description": "Execution metadata for a harness run",
+  "type": "object",
+  "required": ["run_id", "sut", "scenario", "status"],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "Unique identifier for this run (e.g., run-20260207T211433Z)"
+    },
+    "sut": {
+      "type": "object",
+      "description": "System under test metadata",
+      "properties": {
+        "type": { "type": "string", "enum": ["ocp", "k8s"] },
+        "cluster_version": { "type": "string" },
+        "namespace": { "type": "string" }
+      },
+      "required": ["type", "namespace"]
+    },
+    "scenario": {
+      "type": "string",
+      "description": "Scenario identifier from the HarnessManifest"
+    },
+    "manifest": {
+      "type": "string",
+      "description": "Name of the HarnessManifest used"
+    },
+    "timestamps": {
+      "type": "object",
+      "description": "ISO-8601 timestamps for each lifecycle phase",
+      "properties": {
+        "baseline_start": { "type": "string", "format": "date-time" },
+        "baseline_end": { "type": "string", "format": "date-time" },
+        "inject_start": { "type": "string", "format": "date-time" },
+        "inject_end": { "type": "string", "format": "date-time" },
+        "capture_start": { "type": "string", "format": "date-time" },
+        "capture_end": { "type": "string", "format": "date-time" },
+        "invoke_start": { "type": "string", "format": "date-time" },
+        "invoke_end": { "type": "string", "format": "date-time" },
+        "score_start": { "type": "string", "format": "date-time" },
+        "score_end": { "type": "string", "format": "date-time" },
+        "completed": { "type": "string", "format": "date-time" }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["running", "completed", "error"]
+    }
+  }
+}

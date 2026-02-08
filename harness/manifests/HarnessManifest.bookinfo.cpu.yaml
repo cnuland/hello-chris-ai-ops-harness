@@ -1,0 +1,61 @@
+# Scenario A: CPU saturation against Bookinfo reviews-v2
+apiVersion: aiops.redhat.com/v1alpha1
+kind: HarnessManifest
+metadata:
+  name: ocp-bookinfo-cpu-saturation
+  labels:
+    scenario: cpu-saturation
+    workload: bookinfo
+spec:
+  sut:
+    type: ocp
+    clusterVersion: "4.21.x"
+    workload:
+      name: bookinfo
+      namespace: bookinfo
+
+  scenario:
+    id: cpu-saturation-reviews
+    description: >
+      Inject CPU saturation at 95% into the reviews-v2 deployment for 5 minutes.
+      This simulates a resource exhaustion scenario that causes latency increases
+      in reviews-v2 and cascading effects on productpage (upstream caller).
+    hypothesis: >
+      The AIOps agent should identify reviews-v2 CPU saturation as the root cause,
+      not attributing the incident to productpage latency or ratings service issues.
+
+    fault:
+      type: cpu_saturation
+      targetSelector:
+        kind: Deployment
+        name: reviews-v2
+      parameters:
+        cpuPercent: 95
+        durationSeconds: 300
+
+  timing:
+    baselineSeconds: 60
+    injectionWaitSeconds: 120
+    agentTimeoutSeconds: 300
+
+  evidence:
+    metrics:
+      - name: cpu_usage
+        query: 'rate(container_cpu_usage_seconds_total{namespace="bookinfo", pod=~"reviews-v2.*"}[5m])'
+      - name: memory_usage
+        query: 'container_memory_working_set_bytes{namespace="bookinfo", pod=~"reviews-v2.*"}'
+      - name: pod_restarts
+        query: 'kube_pod_container_status_restarts_total{namespace="bookinfo"}'
+    events:
+      namespace: bookinfo
+      sinceMinutes: 15
+
+  scoring:
+    weights:
+      detection: 0.15
+      correlation: 0.15
+      rca: 0.35
+      action_safety: 0.20
+      auditability: 0.15
+    passThreshold: 0.60
+    rcaMinimum: 0.50

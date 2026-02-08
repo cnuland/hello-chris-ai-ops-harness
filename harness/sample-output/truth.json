@@ -1,0 +1,14 @@
+{
+  "root_cause": {
+    "label": "bookinfo/reviews-v2:cpu_saturation",
+    "confidence": 1.0
+  },
+  "fault": {
+    "type": "cpu_saturation",
+    "target": "bookinfo/reviews-v2",
+    "parameters": {
+      "cpuPercent": 95,
+      "durationSeconds": 300
+    }
+  }
+}

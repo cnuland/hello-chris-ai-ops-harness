@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Truth",
+  "description": "Ground truth for the injected fault — never exposed to the AIOps agent",
+  "type": "object",
+  "required": ["root_cause"],
+  "properties": {
+    "root_cause": {
+      "type": "object",
+      "required": ["label", "confidence"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "Canonical root cause label (e.g., bookinfo/reviews-v2:cpu_saturation)"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Always 1.0 for deterministic injection"
+        }
+      }
+    },
+    "fault": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "target": { "type": "string" },
+        "parameters": { "type": "object" }
+      }
+    }
+  }
+}

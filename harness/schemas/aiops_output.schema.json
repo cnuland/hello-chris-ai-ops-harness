@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIOpsOutput",
+  "description": "Structured output from the AIOps agent investigation",
+  "type": "object",
+  "required": ["incident_summary", "rca_ranked"],
+  "properties": {
+    "incident_summary": {
+      "type": "string",
+      "description": "Natural language summary of the incident and findings"
+    },
+    "rca_ranked": {
+      "type": "array",
+      "description": "Ranked root cause hypotheses (most likely first)",
+      "items": { "type": "string" }
+    },
+    "recommended_action": {
+      "type": "string",
+      "description": "Suggested remediation action"
+    },
+    "evidence_links": {
+      "type": "array",
+      "description": "Pointers to specific telemetry artifacts used as evidence",
+      "items": { "type": "string" }
+    },
+    "tool_calls": {
+      "type": "array",
+      "description": "Complete log of tool invocations made during investigation",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tool": { "type": "string" },
+          "arguments": { "type": "object" },
+          "result_summary": { "type": "string" }
+        }
+      }
+    },
+    "raw_response": {
+      "type": "string",
+      "description": "Raw agent response text (if structured parsing failed)"
+    },
+    "error": {
+      "type": "string",
+      "description": "Error message if agent invocation failed"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+# OpenShift 4.21.x target — AIOps Harness Demo namespaces
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bookinfo
+  labels:
+    app.kubernetes.io/part-of: aiops-harness-demo
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aiops-harness
+  labels:
+    app.kubernetes.io/part-of: aiops-harness-demo
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-serving
+  labels:
+    app.kubernetes.io/part-of: aiops-harness-demo

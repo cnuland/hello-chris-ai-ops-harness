@@ -1,0 +1,349 @@
+# Red Hat AIOps White Paper  
+## A Harness-First Architecture for Observable, Auditable, and Continuously Improving AI Operations
+
+**Version:** Draft 1.6  
+**Audience:** Platform engineers, SREs, AI/ML engineers, enterprise architects  
+**Reference Platform:** Red Hat OpenShift 4.21+, OpenShift AI, Llama Stack, OpenTelemetry  
+
+---
+
+#Summary
+
+Artificial Intelligence for IT Operations (AIOps) is evolving from enhanced alerting into **closed-loop operational intelligence** capable of detecting anomalies, understanding their causes, recommending safe remediation, and continuously improving over time. This transformation is driven by the scale and dynamism of distributed cloud-native systems, where telemetry volume, service interdependence, and rapid deployment velocity exceed the cognitive limits of human operators.
+
+Recent advances in generative and agentic AI make automated investigation feasible, but they also introduce a critical operational concern:
+
+> **Decisions may be produced without measurable correctness, reproducibility, or auditability.**
+
+Without verifiable trust, AI-driven automation cannot safely transition from experimentation to production.
+
+This white paper introduces a **Harness-First AIOps Architecture** that ensures:
+
+- **Repeatability** through deterministic evaluation scenarios and versioned artifacts  
+- **Auditability** by grounding every AI conclusion in retrievable evidence and immutable run bundles  
+- **Safety** via external policy gates that constrain remediation behavior  
+- **Portability** across workloads, clusters, and AI models through an open harness contract  
+- **Continuous improvement** using reinforcement-style feedback loops executed in OpenShift AI  
+
+The architecture is demonstrated using:
+
+- **Red Hat OpenShift 4.21+**  
+- **OpenShift AI** for evaluation and refinement  
+- **Llama Stack** for agentic reasoning  
+- **OpenTelemetry + Prometheus** as the evidence plane  
+- **Bookinfo** as a reproducible microservices workload  
+
+Together, these components establish a **governed path to trustworthy operational autonomy** across hybrid cloud environments.
+
+---
+
+# 1. The Evolution of AIOps
+
+## 1.1 From Observability to Operational Intelligence
+
+Traditional observability platforms were designed to answer a narrow question: *What is happening inside the system?* They expose dashboards, alerts, logs, and traces that provide visibility into runtime behavior. However, visibility alone does not create understanding. Human operators must still interpret signals, correlate symptoms across services, determine root cause, and decide how to remediate the issue safely.
+
+Modern cloud-native systems introduce:
+
+- rapid topology change from autoscaling and rollouts  
+- extremely high telemetry cardinality  
+- strict SLO expectations requiring near-real-time remediation  
+- cross-service failure propagation obscuring root cause  
+
+These pressures exceed human cognitive bandwidth.  
+AIOps therefore represents a shift from **visibility → understanding → action**.
+
+## 1.2 Limits of Current AIOps
+
+Most AIOps platforms still lack:
+
+- reproducible evaluation  
+- transparent evidence chains  
+- governance boundaries  
+- measurable correctness  
+
+This leads to the key insight:
+
+> **AIOps is fundamentally an evaluation and governance problem.**
+
+---
+
+# 2. Harness-First AIOps Architecture
+
+## 2.1 Definition
+
+An **AIOps Harness** is an **external, repeatable experimental framework** that:
+
+1. Injects deterministic operational faults  
+2. Captures telemetry and topology evidence  
+3. Invokes an AIOps reasoning system  
+4. Scores correctness, safety, and auditability  
+5. Produces immutable governance artifacts  
+
+This converts AIOps from a **black-box model** into a **measurable operational capability**.
+
+## 2.2 External Independence Principle
+
+The harness must exist **outside** the AI system to ensure:
+
+- unbiased measurement  
+- regression detection  
+- remediation safety  
+- audit-grade provenance  
+- cross-model comparability  
+
+---
+
+# 3. The Harness Contract
+
+## 3.1 Purpose
+
+The **Harness Contract** standardizes interaction between:
+
+- harness orchestrator  
+- AIOps reasoning system  
+- telemetry providers  
+- judge/scoring engine  
+- governance policies  
+
+## 3.2 Required Outputs (Run Bundle)
+
+Every execution emits:
+
+- run.json  
+- truth.json  
+- aiops_output.json  
+- score.json  
+
+These artifacts create a **replayable operational record**.
+
+---
+
+# 4. Reference Scenario — Bookinfo CPU Saturation
+
+The Bookinfo microservices topology provides realistic inter-service dependency for RCA validation.  
+A harness injects CPU saturation into **reviews-v2**, propagating latency and error upstream.
+
+The incident becomes a **deterministic intelligence test**:
+
+- detection speed  
+- correlation accuracy  
+- RCA correctness  
+- remediation safety  
+- auditability  
+
+---
+
+# 5. Examples
+
+
+## 5.1 HarnessManifest.yaml
+
+```
+apiVersion: aiops.redhat.com/v1alpha1  
+kind: HarnessManifest  
+metadata:  
+  name: ocp-bookinfo-cpu-saturation  
+spec:  
+  sut:  
+    type: ocp  
+    clusterVersion: "4.21.x"  
+    workload:  
+      name: "bookinfo"  
+      namespace: "bookinfo"  
+
+  scenario:  
+    id: cpu-saturation-reviews  
+    fault:  
+      type: cpu_saturation  
+      targetSelector:  
+        kind: Deployment  
+        name: reviews-v2  
+      parameters:  
+        cpuPercent: 95  
+        durationSeconds: 600  
+
+---
+
+## 5.2 run.json
+
+{  
+  "run_id": "run-2026-02-07T21:14:33Z",  
+  "sut": {  
+    "type": "ocp",  
+    "cluster_version": "4.21.0",  
+    "namespace": "bookinfo"  
+  },  
+  "scenario": "cpu-saturation-reviews",  
+  "status": "completed"  
+}  
+
+---
+
+## 5.3 truth.json
+
+{  
+  "root_cause": {  
+    "label": "bookinfo/reviews-v2:cpu_saturation",  
+    "confidence": 1.0  
+  }  
+}  
+
+---
+
+## 5.4 aiops_output.json
+
+{  
+  "incident_summary": "Latency and error increase detected in productpage caused by CPU saturation in reviews-v2.",  
+  "rca_ranked": [  
+    "bookinfo/reviews-v2:cpu_saturation",  
+    "ratings latency",  
+    "frontend network issue"  
+  ],  
+  "recommended_action": "scale deployment reviews-v2 to 3 replicas",  
+  "evidence_links": [  
+    "prometheus:cpu_usage_reviews_v2",  
+    "trace:error_path_productpage"  
+  ]  
+}  
+
+---
+
+## 5.5 score.json
+
+{  
+  "category_scores": {  
+    "detection": 0.90,  
+    "correlation": 0.80,  
+    "rca": 1.00,  
+    "action_safety": 1.00,  
+    "auditability": 0.90  
+  },  
+  "weighted_score": 0.91,  
+  "result": "PASS"  
+}  
+
+---
+
+## 5.6 Minimal Python Harness Runner
+
+import json  
+from datetime import datetime  
+from pathlib import Path  
+
+OUTPUT_DIR = Path("/outputs")  
+OUTPUT_DIR.mkdir(exist_ok=True)  
+
+def generate_run_id():  
+    return f"run-{datetime.utcnow().isoformat()}Z"  
+
+def write_json(name, data):  
+    with open(OUTPUT_DIR / name, "w") as f:  
+        json.dump(data, f, indent=2)  
+
+def main():  
+    run_id = generate_run_id()  
+
+    run = {"run_id": run_id, "status": "completed"}  
+    truth = {"root_cause": "bookinfo/reviews-v2:cpu_saturation"}  
+    aiops = {"summary": "CPU saturation detected", "action": "scale deployment"}  
+    score = {"weighted_score": 0.91, "result": "PASS"}  
+
+    write_json("run.json", run)  
+    write_json("truth.json", truth)  
+    write_json("aiops_output.json", aiops)  
+    write_json("score.json", score)  
+
+    print(f"Harness run complete: {run_id}")  
+
+if __name__ == "__main__":  
+    main()  
+
+---
+```
+# 6. Feedback Loop and Continuous Improvement
+
+Harness scoring enables **offline reinforcement learning** in OpenShift AI.  
+Models improve based on structured critique while production safety is preserved.
+
+Automation maturity progresses:
+
+1. Observation  
+2. Recommendation  
+3. Assisted automation  
+4. Bounded autonomy  
+
+Trust grows through **measured correctness**.
+
+---
+
+# 7. OpenShift Reference Architecture
+
+Three logical planes:
+
+Evidence Plane → Prometheus, OpenTelemetry, logs, traces, events, topology  
+AIOps Plane → Llama Stack with tool-mediated evidence retrieval  
+Harness Plane → external orchestrator, scoring engine, artifact registry  
+
+This separation enforces **governance and reproducibility**.
+
+---
+
+# 8. Competitive Landscape
+
+Most AIOps vendors provide:
+
+- anomaly detection  
+- automated RCA  
+- generative summaries  
+
+Few provide:
+
+- portable evaluation  
+- external governance  
+- audit-grade artifacts  
+- reproducible scoring  
+
+**Harness-First AIOps** differentiates through **measurable trust**.
+
+---
+
+# 9. Implementation Guidance
+
+Adopt incrementally:
+
+1. Read-only evaluation  
+2. RCA validation  
+3. Human-approved remediation  
+4. Policy-bounded autonomy  
+
+This mirrors safety adoption in autonomous systems.
+
+---
+
+# 10. Future Directions
+
+Harness standards enable:
+
+- industry AIOps benchmarks  
+- multi-agent operational reasoning  
+- federated cross-enterprise learning  
+
+All grounded in **evidence-based governance**.
+
+---
+
+# 11. Conclusion
+
+AIOps cannot succeed through models alone.  
+It requires:
+
+- repeatable evaluation  
+- external governance  
+- evidence-grounded reasoning  
+- continuous improvement  
+
+The **Harness-First AIOps Architecture** provides a **trusted, open, enterprise-ready foundation** for AI-driven operations on OpenShift and beyond.
+
+> **Trust in AI Operations begins with measurable truth.**
+

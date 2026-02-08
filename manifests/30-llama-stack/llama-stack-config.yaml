@@ -1,0 +1,36 @@
+# Llama Stack ConfigMap — inference-only config pointing to vLLM
+# Applied to the llama-stack namespace for use by the LlamaStackDistribution CR
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llama-stack-config
+  namespace: llama-stack
+data:
+  run.yaml: |
+    version: "2"
+    image_name: remote-vllm
+    apis:
+      - inference
+    providers:
+      inference:
+        - provider_id: vllm-inference
+          provider_type: remote::vllm
+          config:
+            url: http://granite-4-server.llm-serving.svc.cluster.local:8080/v1
+            max_tokens: 4096
+    metadata_store:
+      type: sqlite
+      db_path: /app-data/sqlite/registry.db
+    models:
+      - metadata: {}
+        model_id: granite-4
+        provider_id: vllm-inference
+        provider_model_id: granite-4
+        model_type: llm
+    shields: []
+    vector_dbs: []
+    datasets: []
+    scoring_fns: []
+    benchmarks: []
+    tool_groups: []

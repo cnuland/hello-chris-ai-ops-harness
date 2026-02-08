@@ -1,0 +1,188 @@
+# Harness runner Job — parametrized by SCENARIO env var
+# Use scripts/20_run_harness_cpu.sh or 21_run_harness_crashloop.sh to create
+---
+# Tools server deployment (runs persistently)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aiops-tools-server
+  namespace: aiops-harness
+  labels:
+    app: aiops-tools-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aiops-tools-server
+  template:
+    metadata:
+      labels:
+        app: aiops-tools-server
+    spec:
+      serviceAccountName: aiops-tools-server
+      containers:
+        - name: tools-server
+          image: aiops-tools-server:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: THANOS_QUERIER_URL
+              value: "https://thanos-querier.openshift-monitoring.svc:9091"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aiops-tools-server
+  namespace: aiops-harness
+  labels:
+    app: aiops-tools-server
+spec:
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  selector:
+    app: aiops-tools-server
+---
+# Harness runner Job template for CPU saturation scenario
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: harness-cpu-saturation
+  namespace: aiops-harness
+  labels:
+    app: aiops-harness-runner
+    scenario: cpu-saturation
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: aiops-harness-runner
+        scenario: cpu-saturation
+    spec:
+      serviceAccountName: aiops-harness-runner
+      restartPolicy: Never
+      containers:
+        - name: harness-runner
+          image: aiops-harness-runner:latest
+          imagePullPolicy: Always
+          env:
+            - name: HARNESS_MANIFEST
+              value: /config/manifest.yaml
+            - name: LLAMA_STACK_URL
+              value: "http://granite-4-server.llm-serving.svc.cluster.local:8080"
+            - name: TOOLS_SERVER_URL
+              value: "http://aiops-tools-server.aiops-harness.svc:8000"
+            - name: LLAMA_MODEL_ID
+              value: "granite-4"
+            - name: HARNESS_OUTPUT_DIR
+              value: /outputs
+            - name: BASELINE_WAIT_SECONDS
+              value: "60"
+            - name: INJECTION_WAIT_SECONDS
+              value: "120"
+            - name: AGENT_TIMEOUT_SECONDS
+              value: "300"
+          volumeMounts:
+            - name: manifest
+              mountPath: /config
+              readOnly: true
+            - name: outputs
+              mountPath: /outputs
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: manifest
+          configMap:
+            name: harness-manifest-cpu
+        - name: outputs
+          emptyDir: {}
+---
+# Harness runner Job template for CrashLoop scenario
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: harness-crashloop
+  namespace: aiops-harness
+  labels:
+    app: aiops-harness-runner
+    scenario: crashloop
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: aiops-harness-runner
+        scenario: crashloop
+    spec:
+      serviceAccountName: aiops-harness-runner
+      restartPolicy: Never
+      containers:
+        - name: harness-runner
+          image: aiops-harness-runner:latest
+          imagePullPolicy: Always
+          env:
+            - name: HARNESS_MANIFEST
+              value: /config/manifest.yaml
+            - name: LLAMA_STACK_URL
+              value: "http://granite-4-server.llm-serving.svc.cluster.local:8080"
+            - name: TOOLS_SERVER_URL
+              value: "http://aiops-tools-server.aiops-harness.svc:8000"
+            - name: LLAMA_MODEL_ID
+              value: "granite-4"
+            - name: HARNESS_OUTPUT_DIR
+              value: /outputs
+            - name: BASELINE_WAIT_SECONDS
+              value: "60"
+            - name: INJECTION_WAIT_SECONDS
+              value: "90"
+            - name: AGENT_TIMEOUT_SECONDS
+              value: "300"
+          volumeMounts:
+            - name: manifest
+              mountPath: /config
+              readOnly: true
+            - name: outputs
+              mountPath: /outputs
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: manifest
+          configMap:
+            name: harness-manifest-crashloop
+        - name: outputs
+          emptyDir: {}

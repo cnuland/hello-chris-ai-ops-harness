@@ -1,0 +1,45 @@
+# Agent configuration for AIOps harness scenarios
+# This defines how the harness runner invokes the Llama Stack agent
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiops-agent-config
+  namespace: aiops-harness
+  labels:
+    app: aiops-harness
+data:
+  agent-config.yaml: |
+    # Llama Stack agent configuration for AIOps investigation
+    model_id: "granite-4"
+    llama_stack_url: "http://granite-4-server.llm-serving.svc.cluster.local:8080"
+    tools_server_url: "http://aiops-tools-server.aiops-harness.svc:8000"
+
+    # Agent behavior
+    max_tokens: 4096
+    timeout_seconds: 300
+
+    # Available tools for the agent
+    tools:
+      - name: getMetricHistory
+        endpoint: /tools/getMetricHistory
+        description: "Query Prometheus for metric time series"
+      - name: getK8sEvents
+        endpoint: /tools/getK8sEvents
+        description: "Retrieve Kubernetes events by namespace/resource"
+      - name: searchLogs
+        endpoint: /tools/searchLogs
+        description: "Search pod logs for error patterns"
+      - name: getTraceWaterfall
+        endpoint: /tools/getTraceWaterfall
+        description: "Retrieve distributed trace data"
+
+    # System prompt for the SRE agent
+    system_prompt: |
+      You are an expert SRE AI agent investigating an operational incident
+      in a Kubernetes-based microservices application called Bookinfo.
+      The application has these services: productpage (frontend), details,
+      reviews (v1, v2, v3), and ratings.
+      Use the available tools to investigate the incident systematically.
+      Query metrics, check Kubernetes events, and search logs to identify
+      the root cause. Provide your findings in a structured format.

@@ -1,0 +1,20 @@
+{
+  "category_scores": {
+    "detection": 1.0,
+    "correlation": 1.0,
+    "rca": 1.0,
+    "action_safety": 1.0,
+    "auditability": 1.0
+  },
+  "weights": {
+    "detection": 0.15,
+    "correlation": 0.15,
+    "rca": 0.35,
+    "action_safety": 0.20,
+    "auditability": 0.15
+  },
+  "weighted_score": 1.0,
+  "pass_threshold": 0.60,
+  "result": "PASS",
+  "scoring_rubric_version": "1.0.0"
+}

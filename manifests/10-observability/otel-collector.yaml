@@ -1,0 +1,55 @@
+# OpenTelemetry Collector — minimal pipeline for bookinfo namespace
+# This leverages OpenShift's built-in monitoring; the OTel collector provides
+# additional telemetry enrichment if the OpenTelemetry Operator is installed.
+#
+# NOTE: OpenShift's built-in Prometheus already scrapes container metrics.
+# This config is for environments where you want to add OTel-native collection.
+# If the OpenTelemetry Operator is not installed, this manifest can be skipped.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: aiops-harness
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch:
+        send_batch_size: 1024
+        timeout: 5s
+      resource:
+        attributes:
+          - key: cluster.name
+            value: ironman
+            action: upsert
+
+    exporters:
+      debug:
+        verbosity: basic
+      # Prometheus exporter for metric forwarding
+      prometheus:
+        endpoint: 0.0.0.0:8889
+        namespace: aiops
+
+    service:
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [prometheus, debug]
+        traces:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [debug]
+        logs:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [debug]

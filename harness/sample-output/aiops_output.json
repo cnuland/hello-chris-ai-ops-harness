@@ -1,0 +1,39 @@
+{
+  "incident_summary": "Latency and error rate increase detected in productpage, caused by CPU saturation in reviews-v2. The reviews-v2 pod is consuming 95% CPU, causing request processing delays that cascade upstream to productpage.",
+  "rca_ranked": [
+    "bookinfo/reviews-v2:cpu_saturation",
+    "bookinfo/productpage:upstream_latency",
+    "bookinfo/ratings:secondary_latency"
+  ],
+  "recommended_action": "Scale deployment reviews-v2 to 3 replicas to distribute the CPU load, or investigate the root cause of the CPU consumption (potential code regression, memory leak triggering GC).",
+  "evidence_links": [
+    "prometheus:container_cpu_usage_seconds_total{pod=~\"reviews-v2.*\"}",
+    "prometheus:container_memory_working_set_bytes{pod=~\"reviews-v2.*\"}",
+    "k8s_events:count=5",
+    "prometheus:kube_pod_container_status_restarts_total"
+  ],
+  "tool_calls": [
+    {
+      "tool": "getMetricHistory",
+      "arguments": {
+        "query": "rate(container_cpu_usage_seconds_total{namespace=\"bookinfo\"}[5m])"
+      },
+      "result_summary": "reviews-v2 pod showing 0.95 CPU usage, other pods nominal"
+    },
+    {
+      "tool": "getK8sEvents",
+      "arguments": {
+        "namespace": "bookinfo",
+        "since_minutes": 15
+      },
+      "result_summary": "5 events: reviews-v2 pod liveness probe failures"
+    },
+    {
+      "tool": "getMetricHistory",
+      "arguments": {
+        "query": "container_memory_working_set_bytes{namespace=\"bookinfo\", pod=~\"reviews-v2.*\"}"
+      },
+      "result_summary": "Memory usage elevated but within limits"
+    }
+  ]
+}

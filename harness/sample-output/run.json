@@ -1,0 +1,24 @@
+{
+  "run_id": "run-20260207T211433Z",
+  "sut": {
+    "type": "ocp",
+    "cluster_version": "4.21.0",
+    "namespace": "bookinfo"
+  },
+  "scenario": "cpu-saturation-reviews",
+  "manifest": "ocp-bookinfo-cpu-saturation",
+  "timestamps": {
+    "baseline_start": "2026-02-07T21:14:33Z",
+    "baseline_end": "2026-02-07T21:15:33Z",
+    "inject_start": "2026-02-07T21:15:33Z",
+    "inject_end": "2026-02-07T21:15:35Z",
+    "capture_start": "2026-02-07T21:17:35Z",
+    "capture_end": "2026-02-07T21:17:40Z",
+    "invoke_start": "2026-02-07T21:17:40Z",
+    "invoke_end": "2026-02-07T21:19:12Z",
+    "score_start": "2026-02-07T21:19:12Z",
+    "score_end": "2026-02-07T21:19:12Z",
+    "completed": "2026-02-07T21:19:15Z"
+  },
+  "status": "completed"
+}
