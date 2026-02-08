@@ -7,7 +7,7 @@
 | **Version** | Draft 3.0 |
 | **Audience** | Platform engineers, SREs, AI/ML engineers, enterprise architects |
 | **Reference Platform** | Red Hat OpenShift 4.21+, OpenShift AI, Llama Stack, OpenTelemetry |
-| **Last verified** | February 2026 |
+| **Last Updated** | February, 8th, 2026 |
 
 ---
 
