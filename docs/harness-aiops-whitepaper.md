@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Author** | Chris Nuland |
+| **Author** | Christopher Nuland |
 | **Contributors** | Andreas Spanner |
 | **Version** | Draft 3.0 |
 | **Audience** | Platform engineers, SREs, AI/ML engineers, enterprise architects |
