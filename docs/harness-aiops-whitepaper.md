@@ -97,22 +97,6 @@ An **AIOps Harness** is an **external, repeatable experimental framework** that 
 
 5. **Produce** -- emit immutable governance artifacts (the run bundle) that constitute a complete, replayable record of the evaluation. The run bundle includes run.json (execution metadata), truth.json (ground truth), aiops_output.json (agent output with evidence pointers and tool-call logs), and score.json (multi-dimensional evaluation results).
 
-```mermaid
-flowchart LR
-    subgraph Harness Lifecycle
-        A["1. Inject\n─────────\nDeterministic fault\nwith known ground truth"] --> B["2. Capture\n─────────\nCollect metrics, logs,\ntraces, K8s events"]
-        B --> C["3. Invoke\n─────────\nPresent incident to\nAI agent with tools"]
-        C --> D["4. Score\n─────────\nEvaluate against\nground truth"]
-        D --> E["5. Produce\n─────────\nEmit immutable\nrun bundle"]
-    end
-
-    style A fill:#d73027,color:#fff
-    style B fill:#fc8d59,color:#fff
-    style C fill:#fee08b,color:#000
-    style D fill:#91bfdb,color:#000
-    style E fill:#4575b4,color:#fff
-```
-
 This lifecycle converts AIOps from a **black-box model** into a **measurable operational capability** that can be tracked, compared, and improved over time.
 
 ## 2.2 External Independence Principle
@@ -149,34 +133,6 @@ The contract defines interfaces between five component roles:
 
 - **Governance Policies** -- external policy documents that constrain what the agent is allowed to recommend or execute. Policies define remediation boundaries (e.g., "scaling is permitted; namespace deletion is not"), escalation triggers, and human approval requirements at each maturity stage.
 
-```mermaid
-flowchart TB
-    subgraph contract["Harness Contract — Component Roles"]
-        direction TB
-        HO["Harness Orchestrator\n━━━━━━━━━━━━━━━━━━\nControls lifecycle: injection,\ncapture, invocation, scoring\nEnforces timeboxing & isolation"]
-        AI["AIOps Reasoning System\n━━━━━━━━━━━━━━━━━━━\nAgent under evaluation\nReceives incident + tools\nProduces structured diagnosis"]
-        TP["Telemetry Providers\n━━━━━━━━━━━━━━━━━━\nPrometheus, OTel, K8s API\nExpose tool endpoints\nSchema-validated responses"]
-        JG["Judge / Scoring Engine\n━━━━━━━━━━━━━━━━━━━\nDeterministic + model-based\nMulti-dimensional rubric\nPass/fail determination"]
-        GP["Governance Policies\n━━━━━━━━━━━━━━━━━━\nRemediation boundaries\nEscalation triggers\nHuman approval gates"]
-    end
-
-    HO -->|"injects fault\ninto SUT"| SUT["System Under Test"]
-    HO -->|"invokes"| AI
-    AI -->|"queries via tools"| TP
-    TP -->|"observes"| SUT
-    HO -->|"sends output to"| JG
-    GP -->|"constrains"| AI
-    JG -->|"produces"| RB["Run Bundle\n(4 artifacts)"]
-
-    style HO fill:#4575b4,color:#fff
-    style AI fill:#fee08b,color:#000
-    style TP fill:#91bfdb,color:#000
-    style JG fill:#fc8d59,color:#fff
-    style GP fill:#d73027,color:#fff
-    style SUT fill:#f0f0f0,color:#000
-    style RB fill:#1a9850,color:#fff
-```
-
 ## 3.2 Required Outputs (Run Bundle)
 
 Every harness execution emits a **run bundle** comprising four required artifacts:
@@ -188,30 +144,6 @@ Every harness execution emits a **run bundle** comprising four required artifact
 **aiops_output.json** captures the agent's complete response: an incident summary, ranked root cause hypotheses with confidence scores, recommended remediation actions, and evidence links that point to specific telemetry artifacts (Prometheus queries, trace IDs, Kubernetes event UIDs, log search results). Critically, this artifact also includes the complete tool-call log -- every tool invocation the agent made, with request parameters and response summaries -- creating a full audit trail of the agent's investigative process.
 
 **score.json** captures the multi-dimensional evaluation results: independent scores for detection, correlation, root cause accuracy, action safety, and auditability, along with a weighted composite score and a pass/fail determination. The scoring rubric version is recorded to ensure that scores are comparable across runs.
-
-```mermaid
-flowchart LR
-    subgraph bundle["Run Bundle — Four Contract Artifacts"]
-        direction TB
-        RJ["run.json\n────────────\nRun ID, timestamps,\nSUT info, status"]
-        TJ["truth.json\n────────────\nGround truth label,\nfault type & params\n⛔ Never seen by agent"]
-        AO["aiops_output.json\n────────────────\nIncident summary,\nRCA hypotheses,\nremediation action,\ntool-call log,\nevidence pointers"]
-        SJ["score.json\n────────────\nDetection, Correlation,\nRCA, Action Safety,\nAuditability scores\n+ composite + PASS/FAIL"]
-    end
-
-    HO["Harness\nOrchestrator"] -->|"writes"| RJ
-    HO -->|"writes"| TJ
-    AG["AIOps\nAgent"] -->|"produces"| AO
-    SE["Scoring\nEngine"] -->|"evaluates\nAO vs TJ"| SJ
-
-    style RJ fill:#4575b4,color:#fff
-    style TJ fill:#d73027,color:#fff
-    style AO fill:#fee08b,color:#000
-    style SJ fill:#1a9850,color:#fff
-    style HO fill:#f0f0f0,color:#000
-    style AG fill:#f0f0f0,color:#000
-    style SE fill:#f0f0f0,color:#000
-```
 
 Together, these four artifacts create a **replayable operational record**. Any stakeholder -- an SRE reviewing agent performance, an auditor verifying compliance, an ML engineer debugging a scoring regression -- can reconstruct exactly what happened during the evaluation from the run bundle alone.
 
@@ -228,31 +160,6 @@ Each harness scenario is declared in a **HarnessManifest**, a versioned configur
 The Bookinfo application, originally developed as an Istio reference workload, provides a realistic microservices topology for RCA validation. It comprises four services -- productpage (Python), details (Ruby), reviews (Java, with three versioned deployments), and ratings (Node.js) -- connected through synchronous HTTP call chains. The productpage service serves as the user-facing frontend, calling both details and reviews to assemble the book information page. The reviews service calls ratings to retrieve star ratings. This dependency graph creates precisely the kind of inter-service coupling that makes RCA challenging: a fault in an interior service (reviews-v2) propagates latency and errors upstream to the user-facing service (productpage), while the service exhibiting symptoms (productpage) is not the service harboring the fault.
 
 Bookinfo is well-suited for harness evaluation because its topology is simple enough to establish unambiguous ground truth (the dependency graph is small and well-documented) yet complex enough to test whether an AIOps system can distinguish upstream causes from downstream symptoms. The three versioned deployments of the reviews service add an additional dimension: the agent must identify not just that reviews is the problematic service, but specifically which version (reviews-v2) is experiencing the fault.
-
-```mermaid
-graph LR
-    User(("User")) --> PP["productpage\n(Python)"]
-    PP --> D["details\n(Ruby)"]
-    PP --> R1["reviews-v1\n(Java)\nno ratings"]
-    PP --> R2["reviews-v2\n(Java)\n⭐ black stars"]
-    PP --> R3["reviews-v3\n(Java)\n⭐ red stars"]
-    R2 --> RAT["ratings\n(Node.js)"]
-    R3 --> RAT
-
-    subgraph fault["Fault Injection Target"]
-        R2
-    end
-
-    style R2 fill:#d73027,color:#fff,stroke:#d73027,stroke-width:3px
-    style fault fill:none,stroke:#d73027,stroke-width:2px,stroke-dasharray: 5 5
-    style PP fill:#4575b4,color:#fff
-    style D fill:#91bfdb,color:#000
-    style R1 fill:#91bfdb,color:#000
-    style R3 fill:#91bfdb,color:#000
-    style RAT fill:#91bfdb,color:#000
-```
-
-The dependency graph shows how a fault in `reviews-v2` (highlighted) propagates upstream to `productpage` — the service exhibiting user-visible symptoms is not the service harboring the fault.
 
 ## 4.2 Scenario: CPU Saturation in reviews-v2
 
@@ -413,53 +320,6 @@ First, telemetry volumes vastly exceed even the largest context windows. A singl
 
 Tool-mediated retrieval solves these problems by interposing a structured API layer between the LLM and the telemetry data. Instead of consuming raw data, the LLM invokes tools -- purpose-built functions that query specific data sources and return curated, relevant results. Each tool call is explicitly logged, creating an auditable evidence chain that connects the model's conclusions to the specific data it examined.
 
-```mermaid
-flowchart LR
-    subgraph agent["AIOps Agent (Granite 4 / Llama Stack)"]
-        LLM["LLM\nReasoning"]
-        TC["Tool\nCaller"]
-        LLM -->|"decides what\nto query"| TC
-    end
-
-    subgraph tools["Tools Server (FastAPI)"]
-        T1["getMetricHistory"]
-        T2["getK8sEvents"]
-        T3["searchLogs"]
-        T4["getTraceWaterfall"]
-    end
-
-    subgraph data["Evidence Data Sources"]
-        PROM[("Prometheus\nThanos Querier")]
-        K8S[("Kubernetes\nAPI Server")]
-        LOGS[("Pod Logs\nCluster Logging")]
-        TRACES[("Tempo\nJaeger")]
-    end
-
-    TC -->|"structured\ntool call"| T1
-    TC -->|"structured\ntool call"| T2
-    TC -->|"structured\ntool call"| T3
-    TC -->|"structured\ntool call"| T4
-    T1 -->|"PromQL"| PROM
-    T2 -->|"event list"| K8S
-    T3 -->|"log search"| LOGS
-    T4 -->|"trace query"| TRACES
-    T1 -->|"curated result"| TC
-    T2 -->|"curated result"| TC
-    T3 -->|"curated result"| TC
-    T4 -->|"curated result"| TC
-
-    style LLM fill:#fee08b,color:#000
-    style TC fill:#fc8d59,color:#fff
-    style T1 fill:#4575b4,color:#fff
-    style T2 fill:#4575b4,color:#fff
-    style T3 fill:#4575b4,color:#fff
-    style T4 fill:#4575b4,color:#fff
-    style PROM fill:#91bfdb,color:#000
-    style K8S fill:#91bfdb,color:#000
-    style LOGS fill:#91bfdb,color:#000
-    style TRACES fill:#91bfdb,color:#000
-```
-
 The reference architecture provides four investigative tools:
 
 - **getMetricHistory** queries Prometheus for a specific metric over a defined time window, returning a compact summary rather than raw sample data. The agent can examine CPU utilization, memory usage, request latency percentiles, and error rates for specific services and deployments.
@@ -475,26 +335,6 @@ The reference architecture provides four investigative tools:
 The ReAct (Reasoning + Acting) paradigm, introduced by Yao et al. (2022), provides the foundational framework for tool-mediated operational investigation. ReAct interleaves reasoning traces (chain-of-thought deliberation) with action steps (tool invocations), allowing the model to gather information dynamically and adjust its investigation strategy based on intermediate findings.
 
 In the original ReAct paper, this approach overcame "hallucination and error propagation prevalent in chain-of-thought reasoning" and generated "human-like task-solving trajectories that are more interpretable than baselines." For interactive decision-making tasks, ReAct outperformed existing methods by 34% and 10% absolute success rates on ALFWorld and WebShop benchmarks respectively. The key insight is that reasoning and acting are synergistic: reasoning traces help the model induce, track, and update action plans as well as handle exceptions, while actions allow it to interface with external sources to gather additional information and ground its reasoning in factual evidence.
-
-```mermaid
-flowchart TB
-    START(["Incident\nDescription"]) --> THINK
-
-    THINK["🧠 Reason\n──────────\nAnalyze available evidence.\nForm hypothesis.\nDecide what to query next."]
-    ACT["⚡ Act\n──────────\nInvoke tool:\ngetMetricHistory,\ngetK8sEvents,\nsearchLogs"]
-    OBS["👁 Observe\n──────────\nReceive tool result.\nUpdate understanding.\nRefine hypothesis."]
-    DONE["📋 Conclude\n──────────\nRanked RCA hypotheses,\nremediation action,\nevidence citations"]
-
-    THINK -->|"tool call"| ACT
-    ACT -->|"result"| OBS
-    OBS -->|"need more\nevidence"| THINK
-    OBS -->|"sufficient\nevidence"| DONE
-
-    style THINK fill:#fee08b,color:#000
-    style ACT fill:#fc8d59,color:#fff
-    style OBS fill:#91bfdb,color:#000
-    style DONE fill:#1a9850,color:#fff
-```
 
 Applied to AIOps, the ReAct pattern means the agent receives an incident description and a set of available investigative tools, then conducts a structured investigation: querying metrics to identify anomalous services, examining Kubernetes events for recent changes or failures, searching logs for error patterns, and tracing request paths to identify where latency or errors are introduced. Each tool call is bounded, schema-validated, and logged, producing the evidence chain that the harness scoring engine evaluates.
 
@@ -600,36 +440,6 @@ The connection between harness scoring and model improvement draws on concepts f
 
 Offline reinforcement learning is particularly relevant because it enables model improvement without requiring the model to take actions in a live production environment during training. In online RL, the agent must interact with the environment to learn -- for AIOps, this would mean allowing the AI to take remediating actions in production and learning from outcomes, an obviously unacceptable risk. Offline RL instead learns from previously collected interaction data, using logged experiences (harness run data) to improve the policy without additional environmental interaction. The harness contract's structured artifacts -- particularly the tool-call logs in aiops_output.json and the multi-dimensional scores in score.json -- provide exactly the kind of rich, annotated interaction data that offline RL methods require.
 
-```mermaid
-flowchart TB
-    subgraph loop["Continuous Improvement Feedback Loop"]
-        direction TB
-        HR["Harness Run\n──────────\nInject → Capture →\nInvoke → Score → Produce"]
-        SC["score.json\n──────────\nDetection, Correlation,\nRCA, Safety, Auditability"]
-        AN["Analysis\n──────────\nIdentify systematic\nweaknesses across runs"]
-        RF["Model Refinement\n──────────\nPrompt tuning,\ntool improvements,\noffline RL signals"]
-        IM["Improved Model\n──────────\nUpdated agent with\nbetter diagnostic\ncapability"]
-    end
-
-    HR --> SC
-    SC --> AN
-    AN --> RF
-    RF --> IM
-    IM -->|"regression test\nwith same scenarios"| HR
-
-    subgraph oai["OpenShift AI"]
-        RF
-        IM
-    end
-
-    style HR fill:#4575b4,color:#fff
-    style SC fill:#1a9850,color:#fff
-    style AN fill:#fc8d59,color:#fff
-    style RF fill:#fee08b,color:#000
-    style IM fill:#91bfdb,color:#000
-    style oai fill:none,stroke:#d73027,stroke-width:2px,stroke-dasharray: 5 5
-```
-
 ## 10.2 The Automation Maturity Model
 
 The maturity model for AIOps automation progresses through four stages, each enabled by increasing confidence derived from harness evaluation:
@@ -641,26 +451,6 @@ The maturity model for AIOps automation progresses through four stages, each ena
 **Stage 3: Assisted Automation.** The AI system can execute predefined, low-risk remediation actions (e.g., scaling up, restarting crashed pods) automatically, while escalating higher-risk actions (e.g., configuration changes, service isolation) for human approval. The harness validates that the AI correctly categorizes action risk and executes approved actions safely. Policy gates define the boundary between autonomous and escalated actions.
 
 **Stage 4: Bounded Autonomy.** The AI system can execute a broader range of remediation actions autonomously within defined policy boundaries, with human oversight of the boundary conditions rather than individual actions. The harness continuously validates that the AI operates within its policy envelope and that its autonomous actions produce correct outcomes. This stage requires the highest level of trust, justified by extensive harness scoring history demonstrating consistent accuracy and safety.
-
-```mermaid
-flowchart LR
-    S1["Stage 1\nObservation\n────────────\nAI monitors &\ndiagnoses only\nNo action taken"]
-    S2["Stage 2\nRecommendation\n────────────\nAI recommends\nHuman approves\nbefore execution"]
-    S3["Stage 3\nAssisted\nAutomation\n────────────\nLow-risk: auto\nHigh-risk: escalate"]
-    S4["Stage 4\nBounded\nAutonomy\n────────────\nBroad auto-action\nwithin policy gates"]
-
-    S1 -->|"harness validates\ndetection + RCA"| S2
-    S2 -->|"harness validates\n+ action safety"| S3
-    S3 -->|"harness validates\npolicy compliance"| S4
-
-    TRUST["Trust Level"] -.->|"increases with\naccumulated harness\nscoring evidence"| S4
-
-    style S1 fill:#d73027,color:#fff
-    style S2 fill:#fc8d59,color:#fff
-    style S3 fill:#fee08b,color:#000
-    style S4 fill:#1a9850,color:#fff
-    style TRUST fill:none,stroke:none,color:#666
-```
 
 This maturity progression mirrors the approach taken in autonomous vehicle deployment, where safety frameworks evolve from extensive simulation testing through limited operational deployment to broader operational domains, with each expansion justified by accumulated safety evidence. The harness-first architecture provides the equivalent safety evidence for AIOps: a documented, versioned record of AI performance across diverse fault scenarios that grows over time and justifies progressive automation.
 
@@ -684,67 +474,6 @@ The reference architecture organizes components into three logical planes, each 
 
 **Harness Plane** -- External orchestrator, fault injection controller, scoring engine, and artifact registry. This plane controls the lifecycle of harness runs, including when faults are injected, when evidence capture begins and ends, when the agent is invoked, and how outputs are scored. The harness plane produces and stores the immutable run bundles that constitute the evaluation record. It is the only plane with access to ground truth, and it is the only plane that can trigger fault injection.
 
-```mermaid
-flowchart TB
-    subgraph HP["Harness Plane"]
-        direction LR
-        ORCH["Harness\nOrchestrator\n(K8s Job)"]
-        INJ["Fault\nInjection\nController"]
-        SCORE["Scoring\nEngine"]
-        STORE[("Artifact\nStorage")]
-        ORCH --> INJ
-        ORCH --> SCORE
-        SCORE --> STORE
-    end
-
-    subgraph AP["AIOps Plane"]
-        direction LR
-        AGENT["Llama Stack\nAgent Runtime"]
-        TOOLS["Tools Server\n(FastAPI)"]
-        VLLM["vLLM\nGranite 4\nModel Serving"]
-        AGENT --> VLLM
-        AGENT --> TOOLS
-    end
-
-    subgraph EP["Evidence Plane"]
-        direction LR
-        PROM[("Prometheus\nThanos")]
-        K8S[("Kubernetes\nAPI")]
-        OTEL["OpenTelemetry\nCollector"]
-        LOGS[("Cluster\nLogging")]
-    end
-
-    subgraph SUT["System Under Test"]
-        BOOK["Bookinfo\nMicroservices"]
-    end
-
-    INJ -->|"inject fault"| SUT
-    ORCH -->|"invoke agent"| AGENT
-    TOOLS -->|"query evidence"| EP
-    EP -->|"observe"| SUT
-    AGENT -->|"diagnosis"| ORCH
-
-    HP ~~~ AP
-    AP ~~~ EP
-
-    style HP fill:#4575b4,color:#fff
-    style AP fill:#fee08b,color:#000
-    style EP fill:#91bfdb,color:#000
-    style SUT fill:#f0f0f0,color:#000
-    style ORCH fill:#2166ac,color:#fff
-    style INJ fill:#2166ac,color:#fff
-    style SCORE fill:#2166ac,color:#fff
-    style STORE fill:#2166ac,color:#fff
-    style AGENT fill:#d4a017,color:#000
-    style TOOLS fill:#d4a017,color:#000
-    style VLLM fill:#d4a017,color:#000
-    style PROM fill:#67a9cf,color:#000
-    style K8S fill:#67a9cf,color:#000
-    style OTEL fill:#67a9cf,color:#000
-    style LOGS fill:#67a9cf,color:#000
-    style BOOK fill:#cccccc,color:#000
-```
-
 This three-plane separation enforces **governance and reproducibility** by design. The AI system cannot influence its own evaluation, the evidence plane provides a neutral observation layer, and the harness plane maintains the external independence required for audit-grade assessment.
 
 ## 11.2 Deployment on OpenShift
@@ -755,52 +484,6 @@ On Red Hat OpenShift 4.21+, the three planes map to Kubernetes namespaces with R
 - The **observability** namespace (or the cluster's built-in monitoring stack) hosts Prometheus, the OpenTelemetry Collector, and tracing backends.
 - The **aiops** namespace hosts the Llama Stack agent, the tools server (a FastAPI service exposing getMetricHistory, getK8sEvents, searchLogs, and getTraceWaterfall), and model serving infrastructure.
 - The **harness** namespace hosts the harness orchestrator (deployed as a Kubernetes Job), the scoring engine, and the artifact storage volume.
-
-```mermaid
-flowchart TB
-    subgraph OCP["OpenShift 4.21+ Cluster"]
-        subgraph ns_harness["namespace: aiops-harness"]
-            JOB["Harness Runner\n(Job)"]
-            TS["Tools Server\n(Deployment)"]
-            CM["HarnessManifest\n(ConfigMap)"]
-        end
-
-        subgraph ns_llm["namespace: llm-serving"]
-            VLLM["granite-4-server\n(Deployment)\nvLLM + A100 GPU\nruntimeClassName: nvidia"]
-        end
-
-        subgraph ns_book["namespace: bookinfo"]
-            PP["productpage-v1"]
-            DT["details-v1"]
-            RV1["reviews-v1"]
-            RV2["reviews-v2"]
-            RV3["reviews-v3"]
-            RAT["ratings-v1"]
-            TG["traffic-generator"]
-        end
-
-        subgraph ns_mon["namespace: openshift-monitoring"]
-            PROM["Prometheus\nThanos Querier"]
-        end
-    end
-
-    JOB -->|"POST /v1/chat/completions\n(tool calling)"| VLLM
-    JOB -->|"inject/cleanup\nfault via oc"| ns_book
-    JOB -->|"read manifest"| CM
-    TS -->|"PromQL queries"| PROM
-    TS -->|"K8s events, pod logs"| ns_book
-    PROM -->|"scrape metrics"| ns_book
-
-    style ns_harness fill:#4575b4,color:#fff
-    style ns_llm fill:#fee08b,color:#000
-    style ns_book fill:#91bfdb,color:#000
-    style ns_mon fill:#fc8d59,color:#fff
-    style VLLM fill:#d4a017,color:#000
-    style JOB fill:#2166ac,color:#fff
-    style TS fill:#2166ac,color:#fff
-    style CM fill:#2166ac,color:#fff
-    style PROM fill:#e66101,color:#fff
-```
 
 RBAC policies ensure that the harness namespace has permissions to create fault injection resources (stress containers, configuration mutations) in the bookinfo namespace, that the aiops namespace can read from observability endpoints but cannot access harness-namespace secrets or configmaps, and that the harness namespace can read agent outputs but the agent cannot read harness state.
 
@@ -843,37 +526,6 @@ A single accuracy score is insufficient for AIOps evaluation because operational
 **Action Safety** measures whether the agent's recommended remediation is appropriate, proportionate, and safe. A correct diagnosis paired with a dangerous recommendation (e.g., "delete the namespace" to resolve a CPU issue) should score poorly on this dimension even if the RCA score is perfect.
 
 **Auditability** measures whether the agent's reasoning can be reconstructed from its tool-call log and evidence pointers. Did the agent examine the right signals? Are its evidence citations valid and relevant? Could an independent reviewer follow the reasoning chain from initial observation through evidence gathering to conclusion?
-
-```mermaid
-flowchart LR
-    subgraph scoring["Multi-Dimensional Scoring Rubric"]
-        direction TB
-        DET["Detection\nweight: 15%\n──────────\nDid the agent detect\nthe incident?"]
-        COR["Correlation\nweight: 15%\n──────────\nDid the agent group\nrelated signals?"]
-        RCA["RCA\nweight: 35%\n──────────\nCorrect root cause\nidentified?"]
-        ACT["Action Safety\nweight: 20%\n──────────\nIs the remediation\nsafe and proportionate?"]
-        AUD["Auditability\nweight: 15%\n──────────\nCan reasoning be\nreconstructed?"]
-    end
-
-    DET --> COMP
-    COR --> COMP
-    RCA --> COMP
-    ACT --> COMP
-    AUD --> COMP
-
-    COMP["Weighted\nComposite\nScore"] --> GATE{{"≥ 0.60\nand\nRCA ≥ 0.50?"}}
-    GATE -->|"Yes"| PASS["PASS ✓"]
-    GATE -->|"No"| FAIL["FAIL ✗"]
-
-    style DET fill:#91bfdb,color:#000
-    style COR fill:#91bfdb,color:#000
-    style RCA fill:#4575b4,color:#fff
-    style ACT fill:#fc8d59,color:#fff
-    style AUD fill:#91bfdb,color:#000
-    style COMP fill:#fee08b,color:#000
-    style PASS fill:#1a9850,color:#fff
-    style FAIL fill:#d73027,color:#fff
-```
 
 ## 13.2 Judge Models and Scoring Engines
 
