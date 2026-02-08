@@ -1,9 +1,13 @@
 # Harness-First AIOps: An Architecture for Measurable Trust in AI-Driven Operations
 
-**Version:** Draft 3.0
-**Audience:** Platform engineers, SREs, AI/ML engineers, enterprise architects
-**Reference Platform:** Red Hat OpenShift 4.21+, OpenShift AI, Llama Stack, OpenTelemetry
-**Last verified:** February 2026
+| | |
+|---|---|
+| **Author** | Chris Nuland |
+| **Contributors** | Andreas Spanner |
+| **Version** | Draft 3.0 |
+| **Audience** | Platform engineers, SREs, AI/ML engineers, enterprise architects |
+| **Reference Platform** | Red Hat OpenShift 4.21+, OpenShift AI, Llama Stack, OpenTelemetry |
+| **Last verified** | February 2026 |
 
 ---
 
