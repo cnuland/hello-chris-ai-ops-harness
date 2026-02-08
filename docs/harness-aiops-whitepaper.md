@@ -9,7 +9,7 @@
 
 # Summary
 
-AIOps is evolving from enhanced alerting into **closed-loop operational intelligence** —systems that can detect anomalies, understand their causes, recommend safe remediation, and get better over time. If you've operated any kind of distributed cloud-native system at scale, you already know why: the telemetry volume, service interdependence, and deployment velocity have fundamentally outpaced what human operators can handle with traditional monitoring tools.
+AIOps is evolving from enhanced alerting into **closed-loop operational intelligence**: systems that can detect anomalies, understand their causes, recommend safe remediation, and get better over time. If you've operated any kind of distributed cloud-native system at scale, you already know why: the telemetry volume, service interdependence, and deployment velocity have fundamentally outpaced what human operators can handle with traditional monitoring tools.
 
 The global AIOps platform market is projected to reach USD 32.4 billion by 2028, growing at a compound annual growth rate of 22.7% [15]. Organizations are investing heavily, and for good reason. A typical enterprise Kubernetes environment can generate millions of active metric time series, hundreds of gigabytes of log data per day, and millions of distributed trace spans per hour. When cascading failures propagate across service dependency graphs, you're staring at hundreds of correlated alerts and trying to figure out which ones are symptoms, which are causes, and which are just noise. That's a problem that doesn't scale with headcount.
 
@@ -17,7 +17,7 @@ Recent advances in generative and agentic AI make automated investigation feasib
 
 > **Decisions may be produced without measurable correctness, reproducibility, or auditability.**
 
-Without verifiable trust, AI-driven automation can't safely transition from experimentation to production. The core challenge isn't whether AI can reason about operations —it's whether that reasoning can be governed, measured, and improved systematically.
+Without verifiable trust, AI-driven automation can't safely transition from experimentation to production. The core challenge isn't whether AI can reason about operations. It's whether that reasoning can be governed, measured, and improved systematically.
 
 This white paper introduces a **harness-first AIOps architecture** that ensures:
 
@@ -27,7 +27,7 @@ This white paper introduces a **harness-first AIOps architecture** that ensures:
 - **Portability** across workloads, clusters, and AI models through an open harness contract
 - **Continuous improvement** using reinforcement-style feedback loops executed in OpenShift AI
 
-We demonstrate the architecture using Red Hat OpenShift 4.21+, OpenShift AI, Llama Stack, OpenTelemetry + Prometheus, and the Bookinfo microservices workload. Two reference scenarios —CPU saturation and CrashLoopBackOff —show how different fault types produce different evidence patterns while using the same harness contract and scoring rubric.
+We demonstrate the architecture using Red Hat OpenShift 4.21+, OpenShift AI, Llama Stack, OpenTelemetry + Prometheus, and the Bookinfo microservices workload. Two reference scenarios (CPU saturation and CrashLoopBackOff) show how different fault types produce different evidence patterns while using the same harness contract and scoring rubric.
 
 ## What you'll get by the end
 
@@ -39,7 +39,7 @@ After reading this paper, you'll understand what an AIOps harness is and why it 
 
 ## 1.1 From Observability to Operational Intelligence
 
-Traditional observability platforms were designed to answer a narrow question: *What is happening inside the system?* They give you dashboards, alerts, logs, and traces —visibility into runtime behavior.
+Traditional observability platforms were designed to answer a narrow question: *What is happening inside the system?* They give you dashboards, alerts, logs, and traces, providing visibility into runtime behavior.
 
 But visibility alone doesn't create understanding. You still need to interpret signals, correlate symptoms across services, determine root cause, and decide how to remediate safely. That's a lot of cognitive load, and it only gets worse as your infrastructure grows.
 
@@ -47,15 +47,15 @@ The evolution of AIOps breaks down into three distinct generations, each respond
 
 **First generation (2010-2018): Rule-based alerting and threshold monitoring.** Operations teams defined static thresholds for metrics like CPU utilization, memory consumption, and error rates. When a metric breached its threshold, an alert fired.
 
-Simple and deterministic, but it scaled poorly. As infrastructure grew more dynamic through containerization, autoscaling, and microservices decomposition, static thresholds produced overwhelming volumes of alerts —many of them false positives or symptoms rather than root causes. A single cascading failure could trigger hundreds of alerts across dependent services, burying the actual root cause in noise.
+Simple and deterministic, but it scaled poorly. As infrastructure grew more dynamic through containerization, autoscaling, and microservices decomposition, static thresholds produced overwhelming volumes of alerts, many of them false positives or symptoms rather than root causes. A single cascading failure could trigger hundreds of alerts across dependent services, burying the actual root cause in noise.
 
 **Second generation (2018-2023): Machine learning-based anomaly detection.** Platforms started applying unsupervised learning algorithms to detect statistical anomalies in telemetry streams, correlate related alerts into unified incidents, and reduce the noise that overwhelmed operations teams. Gartner coined the term "AIOps" in 2017 to describe this convergence of big data analytics and machine learning applied to IT operations data.
 
 During this period, AIOps platforms focused on five core capabilities: cross-domain data ingestion, topology assembly and visualization, event correlation and pattern recognition, anomaly detection, and automated remediation triggering.
 
-But a persistent challenge remained: figuring out the right resource constraints at the individual pod level. If you've worked with Kubernetes, you know this is one of the most common questions that comes up. As I documented in [Metrics-Driven Pod Constraints](https://www.redhat.com/en/blog/metrics-driven-pod-constraints), determining appropriate CPU and memory limits required metrics-driven analysis rather than guesswork —yet most platforms lacked the integration to connect constraint misconfiguration to downstream performance anomalies. You'd set high estimates, your app would run fine, but then the bill would arrive and you'd experience some serious sticker shock.
+But a persistent challenge remained: figuring out the right resource constraints at the individual pod level. If you've worked with Kubernetes, you know this is one of the most common questions that comes up. As I documented in [Metrics-Driven Pod Constraints](https://www.redhat.com/en/blog/metrics-driven-pod-constraints), determining appropriate CPU and memory limits required metrics-driven analysis rather than guesswork, yet most platforms lacked the integration to connect constraint misconfiguration to downstream performance anomalies. You'd set high estimates, your app would run fine, but then the bill would arrive and you'd experience some serious sticker shock.
 
-While a significant improvement over static thresholds, these second-generation systems remained fundamentally reactive —they could detect that something was anomalous but couldn't explain why or recommend what to do about it.
+While a significant improvement over static thresholds, these second-generation systems remained fundamentally reactive. They could detect that something was anomalous but couldn't explain why or recommend what to do about it.
 
 **Third generation (2023-present): LLM-powered agentic reasoning.** Rather than simply detecting anomalies, these systems attempt to understand *why* a system is behaving anomalously, identify the root cause, and recommend appropriate remediation. This marks a qualitative shift from pattern matching to causal reasoning. Agents can now conduct structured investigations, querying metrics, logs, traces, and Kubernetes events through tool interfaces to build an evidence-based diagnosis.
 
@@ -70,9 +70,9 @@ Modern cloud-native systems introduce pressures that make this verification esse
 - **Strict SLO expectations** requiring near-real-time detection and remediation don't leave enough time for manual investigation workflows.
 - **Cross-service failure propagation** obscures root cause. The service showing user-visible symptoms is often not the service with the actual fault.
 
-These pressures exceed what human operators can handle. AIOps represents a shift from **visibility to understanding to action** —and that progression demands not just better models, but better methods for evaluating whether those models are trustworthy.
+These pressures exceed what human operators can handle. AIOps represents a shift from **visibility to understanding to action**, and that progression demands not just better models, but better methods for evaluating whether those models are trustworthy.
 
-**Summary:** AIOps has evolved from static thresholds to ML-based anomaly detection to LLM-powered causal reasoning. Each generation is more capable, but also harder to verify —and that's the problem we're solving.
+**Summary:** AIOps has evolved from static thresholds to ML-based anomaly detection to LLM-powered causal reasoning. Each generation is more capable, but also harder to verify, and that's the problem we're solving.
 
 ## 1.2 Limits of Current AIOps
 
@@ -86,7 +86,7 @@ Despite the sophistication of third-generation AIOps platforms, the industry fac
 
 - **Measurable correctness.** The industry lacks a common vocabulary for quantifying AIOps quality. Detection speed, correlation accuracy, RCA correctness, remediation safety, and auditability are orthogonal quality dimensions that require independent measurement, yet no commercial platform provides structured scoring across these dimensions.
 
-The bottleneck to enterprise AIOps adoption isn't model capability —current LLMs can reason about operational incidents with meaningful accuracy. The bottleneck is the absence of a systematic, repeatable, auditable method for proving that capability to the organizations that must trust it.
+The bottleneck to enterprise AIOps adoption isn't model capability. Current LLMs can reason about operational incidents with meaningful accuracy. The bottleneck is the absence of a systematic, repeatable, auditable method for proving that capability to the organizations that must trust it.
 
 ---
 
@@ -98,21 +98,21 @@ An **AIOps harness** is an **external, repeatable experimental framework** that 
 
 The harness operates through a five-phase lifecycle. Here's what each phase does and what you see as the operator running it:
 
-1. **Inject** —introduce a deterministic operational fault with known characteristics into a target workload. The fault type, target, parameters, and duration are declared in a versioned harness manifest. Because we inject the fault deliberately, we know the ground truth with certainty before the AI begins its investigation. *What you see:* the target pod starts crash-looping or CPU spikes to 95%, exactly as declared in the manifest.
+1. **Inject:** introduce a deterministic operational fault with known characteristics into a target workload. The fault type, target, parameters, and duration are declared in a versioned harness manifest. Because we inject the fault deliberately, we know the ground truth with certainty before the AI begins its investigation. *What you see:* the target pod starts crash-looping or CPU spikes to 95%, exactly as declared in the manifest.
 
-2. **Capture** —collect telemetry and topology evidence generated by the system under test during the fault window. The evidence plane uses OpenTelemetry and Prometheus to record metrics, logs, traces, and Kubernetes events in vendor-neutral formats. *What you see:* Prometheus metrics reflecting the fault, Kubernetes events showing pod restarts or health check failures, application logs with error traces.
+2. **Capture:** collect telemetry and topology evidence generated by the system under test during the fault window. The evidence plane uses OpenTelemetry and Prometheus to record metrics, logs, traces, and Kubernetes events in vendor-neutral formats. *What you see:* Prometheus metrics reflecting the fault, Kubernetes events showing pod restarts or health check failures, application logs with error traces.
 
-3. **Invoke** —present the incident to the AIOps reasoning system and let it conduct a tool-mediated investigation. The AI agent receives an incident description and access to investigative tools but doesn't have direct access to `truth.json` or the harness orchestrator. The agent has to arrive at its conclusions independently. *What you see:* the agent making tool calls —querying Prometheus, pulling Kubernetes events, searching logs —and building its diagnosis in real time.
+3. **Invoke:** present the incident to the AIOps reasoning system and let it conduct a tool-mediated investigation. The AI agent receives an incident description and access to investigative tools but doesn't have direct access to `truth.json` or the harness orchestrator. The agent has to arrive at its conclusions independently. *What you see:* the agent making tool calls, querying Prometheus, pulling Kubernetes events, searching logs, and building its diagnosis in real time.
 
-4. **Score** —evaluate the AIOps system's output against the known ground truth using a multi-dimensional scoring rubric. *What you get back:* a `score.json` with independent scores for detection, correlation, RCA, action safety, and auditability, plus a weighted composite and a PASS/FAIL determination.
+4. **Score:** evaluate the AIOps system's output against the known ground truth using a multi-dimensional scoring rubric. *What you get back:* a `score.json` with independent scores for detection, correlation, RCA, action safety, and auditability, plus a weighted composite and a PASS/FAIL determination.
 
-5. **Produce** —emit immutable governance artifacts (the run bundle) that constitute a complete, replayable record of the evaluation. *What you get back:* four JSON files that any stakeholder can use to reconstruct exactly what happened.
+5. **Produce:** emit immutable governance artifacts (the run bundle) that constitute a complete, replayable record of the evaluation. *What you get back:* four JSON files that any stakeholder can use to reconstruct exactly what happened.
 
 This lifecycle converts AIOps from a **black-box model** into a **measurable operational capability** that you can track, compare, and improve over time. It's the same principle behind metrics-driven resource constraints: you don't guess, you measure.
 
 ## 2.2 External Independence Principle
 
-The harness must exist **outside** the AI system it evaluates. This isn't a convenience —it's a fundamental architectural requirement.
+The harness must exist **outside** the AI system it evaluates. This isn't a convenience. It's a fundamental architectural requirement.
 
 - **Unbiased measurement.** If the AI system controls its own evaluation, you can't be sure the results reflect actual capability rather than self-reinforcing confidence.
 - **Regression detection.** When you update or replace a model, the harness re-executes the same scenarios to verify the new model maintains or improves accuracy. Without an external harness, you're deploying model updates on faith.
@@ -128,30 +128,30 @@ The harness must exist **outside** the AI system it evaluates. This isn't a conv
 
 ## 3.1 Purpose
 
-The **harness contract** standardizes the interaction protocol between all components of the architecture. It's the integration boundary between independently developed, independently deployed systems —ensuring that a harness orchestrator built by one team can evaluate an AIOps agent built by another, scored by a third, and audited by a fourth. If you've worked with Tekton or OpenShift Pipelines, you'll recognize this pattern: defining clear abstractions that allow reuse across different contexts, rather than duplicating the same block of logic everywhere.
+The **harness contract** standardizes the interaction protocol between all components of the architecture. It's the integration boundary between independently developed, independently deployed systems, ensuring that a harness orchestrator built by one team can evaluate an AIOps agent built by another, scored by a third, and audited by a fourth. If you've worked with Tekton or OpenShift Pipelines, you'll recognize this pattern: defining clear abstractions that allow reuse across different contexts, rather than duplicating the same block of logic everywhere.
 
-The contract defines what each component *must* provide —this is the specification. How each component implements that interface is up to the builder. In the reference implementation, the tools server is a FastAPI service and the harness runner is a Python container deployed as a Kubernetes Job, but the contract doesn't require either of those choices.
+The contract defines what each component *must* provide. This is the specification. How each component implements that interface is up to the builder. In the reference implementation, the tools server is a FastAPI service and the harness runner is a Python container deployed as a Kubernetes Job, but the contract doesn't require either of those choices.
 
 The contract defines interfaces between five component roles:
 
-- **Harness Orchestrator** —controls the run lifecycle: injection timing, evidence capture windows, agent invocation, artifact collection. Enforces timeboxing and isolation.
-- **AIOps Reasoning System** —the agent under evaluation. Receives an incident description and tool endpoints; must produce structured JSON output with ranked root cause hypotheses, evidence pointers, recommended actions, and confidence scores.
-- **Telemetry Providers** —evidence plane components (Prometheus, OpenTelemetry Collector, Kubernetes API) that expose investigative tools. Tool schemas define input parameters, output formats, and error handling.
-- **Judge/Scoring Engine** —evaluates agent output against ground truth. Can be deterministic (exact match against `truth.json`), model-based (LLM-as-judge), or hybrid.
-- **Governance Policies** —external documents that constrain what the agent can recommend or execute (e.g., "scaling is permitted; namespace deletion is not").
+- **Harness Orchestrator:** controls the run lifecycle: injection timing, evidence capture windows, agent invocation, artifact collection. Enforces timeboxing and isolation.
+- **AIOps Reasoning System:** the agent under evaluation. Receives an incident description and tool endpoints; must produce structured JSON output with ranked root cause hypotheses, evidence pointers, recommended actions, and confidence scores.
+- **Telemetry Providers:** evidence plane components (Prometheus, OpenTelemetry Collector, Kubernetes API) that expose investigative tools. Tool schemas define input parameters, output formats, and error handling.
+- **Judge/Scoring Engine:** evaluates agent output against ground truth. Can be deterministic (exact match against `truth.json`), model-based (LLM-as-judge), or hybrid.
+- **Governance Policies:** external documents that constrain what the agent can recommend or execute (e.g., "scaling is permitted; namespace deletion is not").
 
 ## 3.2 Required Outputs (Run Bundle)
 
 Every harness execution emits a **run bundle** comprising four required artifacts. Here's what each one captures:
 
-- **`run.json`** —"what we ran." Run ID, timestamps for each lifecycle phase, system under test (cluster version, namespace, workload), scenario executed, terminal status.
-- **`truth.json`** —"what actually happened." The known root cause label, fault type, target resource, and confidence value (always 1.0 for deterministic injection). Never exposed to the agent.
-- **`aiops_output.json`** —"what the agent concluded and how it got there." Incident summary, ranked root cause hypotheses, recommended actions, and the complete tool-call log with request parameters and response summaries. This is your audit trail.
-- **`score.json`** —"how it did." Independent scores for detection, correlation, RCA, action safety, and auditability, plus a weighted composite score and PASS/FAIL determination.
+- **`run.json`**: "what we ran." Run ID, timestamps for each lifecycle phase, system under test (cluster version, namespace, workload), scenario executed, terminal status.
+- **`truth.json`**: "what actually happened." The known root cause label, fault type, target resource, and confidence value (always 1.0 for deterministic injection). Never exposed to the agent.
+- **`aiops_output.json`**: "what the agent concluded and how it got there." Incident summary, ranked root cause hypotheses, recommended actions, and the complete tool-call log with request parameters and response summaries. This is your audit trail.
+- **`score.json`**: "how it did." Independent scores for detection, correlation, RCA, action safety, and auditability, plus a weighted composite score and PASS/FAIL determination.
 
 An **evidence pointer** is a structured reference in `aiops_output.json` that links an agent conclusion to a specific piece of telemetry evidence. For example: `{"type": "prometheus", "query": "container_cpu_usage_seconds_total{pod='reviews-v2'}", "time_range": "2026-02-07T21:14:00Z/2026-02-07T21:24:00Z"}`. Evidence pointers let auditors verify that the agent's reasoning was grounded in real data rather than hallucinated.
 
-Together, these four artifacts create a **replayable operational record**. Any stakeholder —an SRE reviewing agent performance, an auditor verifying compliance, an ML engineer debugging a scoring regression —can reconstruct exactly what happened from the run bundle alone.
+Together, these four artifacts create a **replayable operational record**. Any stakeholder, whether an SRE reviewing agent performance, an auditor verifying compliance, or an ML engineer debugging a scoring regression, can reconstruct exactly what happened from the run bundle alone.
 
 ## 3.3 Harness Manifest
 
@@ -165,7 +165,7 @@ Each harness scenario is declared in a **HarnessManifest**, a versioned YAML doc
 
 ## 4.1 Why Bookinfo
 
-The Bookinfo application, originally developed as an Istio reference workload, gives us a realistic microservices topology for RCA validation. It has four services —productpage (Python), details (Ruby), reviews (Java, with three versioned deployments), and ratings (Node.js) —connected through synchronous HTTP call chains.
+The Bookinfo application, originally developed as an Istio reference workload, gives us a realistic microservices topology for RCA validation. It has four services: productpage (Python), details (Ruby), reviews (Java, with three versioned deployments), and ratings (Node.js), all connected through synchronous HTTP call chains.
 
 The productpage service is the user-facing frontend, calling both details and reviews to assemble the book information page. The reviews service calls ratings to retrieve star ratings. This dependency graph creates precisely the kind of inter-service coupling that makes RCA challenging: a fault in an interior service propagates upstream, while the service showing symptoms isn't the service with the actual fault.
 
@@ -175,7 +175,7 @@ Bookinfo works well for harness evaluation because its topology is simple enough
 
 ## 4.2 Scenario A: CPU Saturation in reviews-v2
 
-The harness injects CPU saturation at 95% into the reviews-v2 deployment for 600 seconds (10 minutes). This simulates a resource exhaustion scenario —maybe a code regression introducing an expensive computation, a memory leak triggering garbage collection overhead, or a runaway process consuming CPU capacity.
+The harness injects CPU saturation at 95% into the reviews-v2 deployment for 600 seconds (10 minutes). This simulates a resource exhaustion scenario: maybe a code regression introducing an expensive computation, a memory leak triggering garbage collection overhead, or a runaway process consuming CPU capacity.
 
 The injected fault creates a cascade of observable effects:
 
@@ -187,7 +187,7 @@ The injected fault creates a cascade of observable effects:
 
 The second scenario injects a bad environment variable (`INVALID_DB_HOST`) into ratings-v1, causing the container to crash on startup and enter CrashLoopBackOff. This produces a different evidence pattern from CPU saturation: instead of gradual metric degradation, you see discrete Kubernetes events (pod restart, BackOff), missing metrics (the pod isn't running long enough to emit them), and upstream error responses from reviews when it can't reach ratings.
 
-Using two scenarios with different evidence patterns validates that the agent isn't pattern-matching against a single fault type. The harness contract and scoring rubric are identical for both —only the manifest and ground truth differ.
+Using two scenarios with different evidence patterns validates that the agent isn't pattern-matching against a single fault type. The harness contract and scoring rubric are identical for both. Only the manifest and ground truth differ.
 
 ## 4.4 Five Scoring Dimensions
 
@@ -345,12 +345,12 @@ if __name__ == "__main__":
 
 ## 6.1 Why Raw Telemetry Ingestion Fails
 
-The naive approach to applying LLMs in IT operations is to dump raw telemetry —log lines, metric values, trace spans —directly into the model's context window and ask it to diagnose the incident.
+The naive approach to applying LLMs in IT operations is to dump raw telemetry (log lines, metric values, trace spans) directly into the model's context window and ask it to diagnose the incident.
 
 This fails for four reasons:
 
 1. **Volume.** Telemetry volumes vastly exceed even the largest context windows. A single Kubernetes cluster can produce gigabytes of log data per hour; even aggressive filtering can't reduce this to something that fits within a 128K-token context window while preserving the diagnostic signal you need.
-2. **Noise.** Raw telemetry contains enormous amounts of irrelevant data —healthy heartbeat logs, nominal metric values, trace spans for successful requests —that eats up context capacity without contributing to diagnosis.
+2. **Noise.** Raw telemetry contains enormous amounts of irrelevant data like healthy heartbeat logs, nominal metric values, and trace spans for successful requests. All of that eats up context capacity without contributing to diagnosis.
 3. **Format diversity.** LLMs don't have the domain-specific training to reliably parse Prometheus exposition format, structured JSON logs, OpenTelemetry protobuf traces, and Kubernetes event objects without extensive prompt engineering.
 4. **Unverifiable reasoning.** You can't trace the model's conclusions back to specific evidence artifacts, making audit and compliance impossible.
 
@@ -358,14 +358,14 @@ The fourth point is the most important for governance. If you can't show *what* 
 
 ## 6.2 Tool-Mediated Retrieval Architecture
 
-Tool-mediated retrieval solves these problems by putting a structured API layer between the LLM and the telemetry data. Instead of consuming raw data, the LLM invokes tools —purpose-built functions that query specific data sources and return curated, relevant results. Each tool call is explicitly logged, creating an auditable evidence chain.
+Tool-mediated retrieval solves these problems by putting a structured API layer between the LLM and the telemetry data. Instead of consuming raw data, the LLM invokes tools: purpose-built functions that query specific data sources and return curated, relevant results. Each tool call is explicitly logged, creating an auditable evidence chain.
 
 The contract specifies four investigative tool schemas. The reference implementation exposes them as a FastAPI service:
 
-- **`getMetricHistory`** —queries Prometheus for a specific metric over a defined time window, returning a compact summary rather than raw samples.
-- **`getK8sEvents`** —retrieves Kubernetes events filtered by namespace, resource type, and time range (pod scheduling, health check failures, OOM kills, image pull errors).
-- **`searchLogs`** —performs targeted log searches for specific error patterns, exception types, or warning messages within a bounded time window.
-- **`getTraceWaterfall`** —retrieves distributed trace data for requests that traversed the affected services, showing exactly where latency or errors were introduced.
+- **`getMetricHistory`:** queries Prometheus for a specific metric over a defined time window, returning a compact summary rather than raw samples.
+- **`getK8sEvents`:** retrieves Kubernetes events filtered by namespace, resource type, and time range (pod scheduling, health check failures, OOM kills, image pull errors).
+- **`searchLogs`:** performs targeted log searches for specific error patterns, exception types, or warning messages within a bounded time window.
+- **`getTraceWaterfall`:** retrieves distributed trace data for requests that traversed the affected services, showing exactly where latency or errors were introduced.
 
 ## 6.3 The ReAct Paradigm for Operational Investigation
 
@@ -379,7 +379,7 @@ Applied to AIOps, this means the agent receives an incident description and a se
 
 Llama Stack [29], Meta's open framework for building AI applications, provides a production-ready implementation of these patterns. It exposes a unified API for inference, safety, agents, tools, and retrieval-augmented generation (RAG), with one consistent interface across deployment environments. You can swap between inference providers without code changes.
 
-For the harness-first architecture, Llama Stack provides the agent runtime that executes tool-mediated investigations. The agent's tool schemas map to the operational data sources, and the framework's built-in monitoring captures the complete tool-call sequence for inclusion in `aiops_output.json`. This means the harness doesn't need to implement agent runtime infrastructure from scratch —it leverages Llama Stack's existing lifecycle management while maintaining full visibility into the agent's investigative process.
+For the harness-first architecture, Llama Stack provides the agent runtime that executes tool-mediated investigations. The agent's tool schemas map to the operational data sources, and the framework's built-in monitoring captures the complete tool-call sequence for inclusion in `aiops_output.json`. This means the harness doesn't need to implement agent runtime infrastructure from scratch. It leverages Llama Stack's existing lifecycle management while maintaining full visibility into the agent's investigative process.
 
 **Summary:** Instead of dumping raw telemetry into the LLM, we give it structured tools to query what it needs. Every query is logged, making the reasoning auditable and the evidence verifiable.
 
@@ -393,10 +393,10 @@ OpenTelemetry (OTel) has become the de facto industry standard for vendor-neutra
 
 OpenTelemetry defines four primary signal types:
 
-- **Traces** —distributed request flows as directed acyclic graphs of spans, with context propagated across process boundaries
-- **Metrics** —quantitative measurements with customizable aggregations (counters, gauges, histograms)
-- **Logs** —structured event records correlated with traces and metrics through shared context
-- **Baggage** —name/value pairs propagated across service boundaries for cross-cutting concerns
+- **Traces:** distributed request flows as directed acyclic graphs of spans, with context propagated across process boundaries
+- **Metrics:** quantitative measurements with customizable aggregations (counters, gauges, histograms)
+- **Logs:** structured event records correlated with traces and metrics through shared context
+- **Baggage:** name/value pairs propagated across service boundaries for cross-cutting concerns
 
 The vendor ecosystem is broad. The OpenTelemetry vendor registry lists over 120 organizations that consume OTel data natively via OTLP, spanning open-source projects, commercial vendors, and major cloud platforms. This means telemetry collected via OpenTelemetry is portable across virtually any observability backend, eliminating vendor lock-in at the instrumentation layer.
 
@@ -404,7 +404,7 @@ For the harness, this portability matters in three ways: it provides a **standar
 
 ## 7.2 Prometheus as the Metrics Backbone
 
-Prometheus remains the predominant time-series platform in Kubernetes environments. Its query language (PromQL) provides expressive, composable metric queries that can identify anomalies, compute rates, aggregate across dimensions, and compare current behavior against baselines. If you've used PromQL to calculate running averages, standard deviations, or z-scores for resource utilization —the kind of metrics-driven analysis that turns guesswork into empirical decisions —you already appreciate how powerful this is for incident evidence capture.
+Prometheus remains the predominant time-series platform in Kubernetes environments. Its query language (PromQL) provides expressive, composable metric queries that can identify anomalies, compute rates, aggregate across dimensions, and compare current behavior against baselines. If you've used PromQL to calculate running averages, standard deviations, or z-scores for resource utilization (the kind of metrics-driven analysis that turns guesswork into empirical decisions), you already appreciate how powerful this is for incident evidence capture.
 
 In the harness architecture, Prometheus serves as the primary data source for `getMetricHistory`. The tool returns a structured summary of metric behavior during a specified period, letting the agent identify anomalies without processing raw time-series data.
 
@@ -414,7 +414,7 @@ The combination of OpenTelemetry for instrumentation and Prometheus for metric s
 
 # 8. Competitive Landscape
 
-The enterprise AIOps market has several major platforms. What they all have in common is that their AI evaluation is internal to the platform, with no mechanism for external, portable evaluation. Here's a summary of the major players and what they offer —then the gap they all share.
+The enterprise AIOps market has several major platforms. What they all have in common is that their AI evaluation is internal to the platform, with no mechanism for external, portable evaluation. Here's a summary of the major players and what they offer, followed by the gap they all share.
 
 **ServiceNow** (ITOM + Now Assist) provides predictive analytics and ML-driven automation tightly integrated with ITSM. Strong on service topology correlation. Vendor-stated: generative AI capabilities including natural language incident summaries and agentic workflows [10, 11].
 
@@ -440,13 +440,13 @@ The harness-first architecture fills this gap not by replacing these platforms b
 
 ## 9.1 The Governance Challenge
 
-Deploying AI-driven operational decision-making in regulated industries introduces governance requirements that current AIOps platforms aren't designed to satisfy. Regulatory frameworks require auditability, explainability, and reproducibility of consequential decisions —properties that are fundamentally absent from black-box AI systems.
+Deploying AI-driven operational decision-making in regulated industries introduces governance requirements that current AIOps platforms aren't designed to satisfy. Regulatory frameworks require auditability, explainability, and reproducibility of consequential decisions, properties that are fundamentally absent from black-box AI systems.
 
 In practical terms: if your AIOps system changes a deployment, you need to show *who or what* decided, *what evidence* it used, *what policy* allowed it, and *how you can replay it*. That's the bar. Most platforms can't clear it.
 
 ## 9.2 Regulatory Landscape
 
-**SOC 2** requires organizations to demonstrate documented controls with auditable evidence. When an AIOps system automatically remediates an incident —scaling a deployment, restarting pods, modifying network policies —that action must be traceable to an authorized decision with supporting justification. Platforms that generate recommendations without structured evidence chains create an audit gap.
+**SOC 2** requires organizations to demonstrate documented controls with auditable evidence. When an AIOps system automatically remediates an incident (scaling a deployment, restarting pods, modifying network policies), that action must be traceable to an authorized decision with supporting justification. Platforms that generate recommendations without structured evidence chains create an audit gap.
 
 **FedRAMP** governs cloud services for US federal agencies (493 systems authorized as of early 2026 [24]). The newer FedRAMP 20x initiative is building "a cloud-native approach to FedRAMP authorization," and FedRAMP has established an "AI Prioritization" track for AI-powered operational tools. AI-driven operational decisions will need to satisfy the same continuous monitoring and audit trail requirements as the infrastructure they manage.
 
@@ -477,9 +477,9 @@ Every harness run produces structured evaluation data in `score.json`. This scor
 
 The connection to reinforcement learning is direct. In standard RLHF, human evaluators rate model outputs and the ratings train a reward model. The harness-first approach adapts this pattern: the scoring engine produces structured scores that serve as the reward signal.
 
-The key difference is that harness feedback comes from a combination of objective ground truth (did the agent correctly identify the injected fault?) and structured rubric evaluation (was the evidence chain complete? was the recommended action safe?), rather than purely subjective preferences. This is analogous to how we use empirical metrics rather than guesswork to determine resource constraints —you want data-driven decisions, not estimates.
+The key difference is that harness feedback comes from a combination of objective ground truth (did the agent correctly identify the injected fault?) and structured rubric evaluation (was the evidence chain complete? was the recommended action safe?), rather than purely subjective preferences. This is analogous to how we use empirical metrics rather than guesswork to determine resource constraints. You want data-driven decisions, not estimates.
 
-Offline RL is particularly relevant because it enables model improvement without requiring the model to take actions in a live production environment. The harness contract's structured artifacts —tool-call logs and multi-dimensional scores —provide exactly the kind of rich, annotated interaction data that offline RL methods require.
+Offline RL is particularly relevant because it enables model improvement without requiring the model to take actions in a live production environment. The harness contract's structured artifacts, including tool-call logs and multi-dimensional scores, provide exactly the kind of rich, annotated interaction data that offline RL methods require.
 
 ## 10.2 The Automation Maturity Model
 
@@ -512,9 +512,9 @@ When implemented within OpenShift AI, this feedback loop operates within the sam
 
 The reference architecture organizes components into three logical planes, each with distinct responsibilities and isolation boundaries:
 
-- **Evidence Plane** —Prometheus, OpenTelemetry Collector, cluster logging, distributed tracing, Kubernetes API. Passive: records what happens, doesn't influence behavior. Exposes tool endpoints that the agent queries.
-- **AIOps Plane** —Llama Stack agent runtime with tool-mediated retrieval. Isolated from the harness plane: can't access ground truth, rubrics, or orchestrator state. Can only observe through its tools, just as a human operator would use monitoring dashboards.
-- **Harness Plane** —External orchestrator, fault injection controller, scoring engine, artifact registry. The only plane with access to ground truth and the only plane that can trigger fault injection.
+- **Evidence Plane:** Prometheus, OpenTelemetry Collector, cluster logging, distributed tracing, Kubernetes API. Passive: records what happens, doesn't influence behavior. Exposes tool endpoints that the agent queries.
+- **AIOps Plane:** Llama Stack agent runtime with tool-mediated retrieval. Isolated from the harness plane: can't access ground truth, rubrics, or orchestrator state. Can only observe through its tools, just as a human operator would use monitoring dashboards.
+- **Harness Plane:** External orchestrator, fault injection controller, scoring engine, artifact registry. The only plane with access to ground truth and the only plane that can trigger fault injection.
 
 This separation enforces **governance and reproducibility** by design. The AI can't influence its own evaluation.
 
@@ -522,10 +522,10 @@ This separation enforces **governance and reproducibility** by design. The AI ca
 
 On Red Hat OpenShift 4.21+, the three planes map to Kubernetes namespaces with RBAC policies enforcing isolation:
 
-- **`bookinfo`** —the system under test (Bookinfo application deployments)
-- **`openshift-monitoring`** (or equivalent) —Prometheus, OpenTelemetry Collector, tracing backends
-- **`aiops-harness`** —tools server (FastAPI service exposing `getMetricHistory`, `getK8sEvents`, `searchLogs`, `getTraceWaterfall`) and the harness orchestrator (Kubernetes Job)
-- **`llm-serving`** —model serving infrastructure (vLLM + Granite 4 on GPU nodes)
+- **`bookinfo`:** the system under test (Bookinfo application deployments)
+- **`openshift-monitoring`** (or equivalent): Prometheus, OpenTelemetry Collector, tracing backends
+- **`aiops-harness`:** tools server (FastAPI service exposing `getMetricHistory`, `getK8sEvents`, `searchLogs`, `getTraceWaterfall`) and the harness orchestrator (Kubernetes Job)
+- **`llm-serving`:** model serving infrastructure (vLLM + Granite 4 on GPU nodes)
 
 RBAC policies ensure the harness namespace can create fault injection resources in bookinfo, the aiops namespace can read from observability endpoints but can't access harness secrets, and the harness can read agent outputs but the agent can't read harness state.
 
@@ -545,9 +545,9 @@ Without deterministic fault injection, there's no ground truth. Without ground t
 
 Three major frameworks lead adoption:
 
-- **LitmusChaos** [27] (CNCF-hosted) —Kubernetes-native, declarative experiments via ChaosHub, exports Prometheus metrics for correlation with harness evidence.
-- **Chaos Mesh** [28] (CNCF incubating) —CRD-native fault injection (PodChaos, NetworkChaos, StressChaos) without modifying application deployment logic. RBAC-enabled security controls.
-- **Gremlin** —enterprise-grade commercial approach with reliability scoring and dependency discovery. Supports AWS, Azure, and Kubernetes.
+- **LitmusChaos** [27] (CNCF-hosted): Kubernetes-native, declarative experiments via ChaosHub, exports Prometheus metrics for correlation with harness evidence.
+- **Chaos Mesh** [28] (CNCF incubating): CRD-native fault injection (PodChaos, NetworkChaos, StressChaos) without modifying application deployment logic. RBAC-enabled security controls.
+- **Gremlin:** enterprise-grade commercial approach with reliability scoring and dependency discovery. Supports AWS, Azure, and Kubernetes.
 
 The harness contract abstracts the specific chaos engineering implementation. Any framework works, provided the injected faults are deterministic, time-bounded, and declared in the manifest.
 
@@ -577,7 +577,7 @@ Zheng et al. [7] demonstrated that strong LLM judges can match human evaluator a
 
 ## 13.3 Stratified Evaluation Complexity
 
-Detecting a simple threshold violation is categorically different from diagnosing a cascading failure with multiple interacting root causes. The RCAEval benchmark's [1] organization into three suites —metric-only, multi-source, and code-level —reflects this principle.
+Detecting a simple threshold violation is categorically different from diagnosing a cascading failure with multiple interacting root causes. The RCAEval benchmark's [1] organization into three suites (metric-only, multi-source, and code-level) reflects this principle.
 
 The harness contract supports stratified evaluation by defining scenario categories with varying difficulty levels. You can establish baseline capability on simple scenarios before progressing to complex multi-service failure modes.
 
@@ -701,7 +701,7 @@ This isn't an easy problem, and this type of approach takes constant evaluation 
 
 **Standards and Governance**
 
-21. ISO/IEC. (2023). *ISO/IEC 42001:2023 —Artificial Intelligence Management System.*
+21. ISO/IEC. (2023). *ISO/IEC 42001:2023, Artificial Intelligence Management System.*
 
 22. NIST. (2023). *AI Risk Management Framework (AI RMF 1.0).*
 
