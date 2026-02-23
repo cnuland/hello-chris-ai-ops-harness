@@ -19,3 +19,24 @@ metadata:
   name: llm-serving
   labels:
     app.kubernetes.io/part-of: aiops-harness-demo
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llama-stack
+  labels:
+    app.kubernetes.io/part-of: aiops-harness-demo
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mlflow-aiops
+  labels:
+    app.kubernetes.io/part-of: aiops-harness-demo
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mlflow-harness
+  labels:
+    app.kubernetes.io/part-of: aiops-harness-demo

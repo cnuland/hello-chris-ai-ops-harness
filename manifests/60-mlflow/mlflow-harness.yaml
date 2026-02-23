@@ -1,0 +1,105 @@
+# MLFlow — Harness Evaluation Tracker
+#
+# Tracks the AI Harness evaluation results.
+# Each harness run = one MLFlow run.
+#
+# Logs: six scoring dimensions, weighted composite, PASS/FAIL,
+# cross-model judge matrix, fact-checking results, hallucination flags.
+#
+# This is the HARNESS side of experiment tracking.
+# The PIPELINE side uses a separate MLFlow instance (mlflow-aiops.yaml).
+#
+# Separation maintains the External Independence Principle:
+# the pipeline team sees their metrics, the evaluation team sees theirs,
+# and neither can influence the other.
+#
+# NOTE: This is a development stub using SQLite. Production deployments
+# should use PostgreSQL for the backend store and S3/MinIO for artifacts.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow-harness
+  namespace: mlflow-harness
+  labels:
+    app: mlflow-harness
+    component: experiment-tracking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow-harness
+  template:
+    metadata:
+      labels:
+        app: mlflow-harness
+        component: experiment-tracking
+    spec:
+      containers:
+        - name: mlflow
+          image: ghcr.io/mlflow/mlflow:latest
+          command: ["mlflow"]
+          args:
+            - "server"
+            - "--host=0.0.0.0"
+            - "--port=5000"
+            - "--backend-store-uri=sqlite:///mlflow/mlflow.db"
+            - "--default-artifact-root=/mlflow/artifacts"
+          ports:
+            - containerPort: 5000
+              name: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: mlflow-data
+              mountPath: /mlflow
+      volumes:
+        - name: mlflow-data
+          persistentVolumeClaim:
+            claimName: mlflow-harness-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-harness
+  namespace: mlflow-harness
+  labels:
+    app: mlflow-harness
+spec:
+  ports:
+    - port: 5000
+      targetPort: 5000
+      name: http
+  selector:
+    app: mlflow-harness
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-harness-data
+  namespace: mlflow-harness
+  labels:
+    app: mlflow-harness
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

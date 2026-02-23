@@ -1,0 +1,77 @@
+# PrometheusRule CRDs for AIOps Harness scenarios
+#
+# These rules define the alerting conditions that trigger the AIOps
+# pipeline to begin autonomous investigation. When a rule fires,
+# AlertManager routes the alert via webhook to the Llama Stack agent.
+#
+# MTTD (Mean Time to Detection) is measured from fault injection
+# to when these alerts fire.
+#
+# Label: aiops-harness: "true" is used by AlertManager to route
+# these alerts to the AIOps webhook receiver.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aiops-bookinfo-alerts
+  namespace: openshift-monitoring
+  labels:
+    app: aiops-harness
+spec:
+  groups:
+    - name: aiops-bookinfo-cpu
+      rules:
+        # CPU Saturation Alert
+        # Fires when any container in the bookinfo namespace sustains
+        # CPU usage above 90% for 2 minutes. This matches Scenario A
+        # (CPU saturation in reviews-v2).
+        - alert: BookinfoCPUSaturation
+          expr: |
+            (
+              rate(container_cpu_usage_seconds_total{
+                namespace="bookinfo",
+                container!="",
+                container!="POD"
+              }[2m])
+              /
+              on(namespace, pod, container)
+              kube_pod_container_resource_limits{
+                namespace="bookinfo",
+                resource="cpu"
+              }
+            ) > 0.90
+          for: 2m
+          labels:
+            severity: critical
+            aiops-harness: "true"
+            scenario: cpu-saturation
+          annotations:
+            summary: "CPU saturation detected in bookinfo namespace"
+            description: >-
+              Container {{ $labels.container }} in pod {{ $labels.pod }}
+              is using more than 90% of its CPU limit for over 2 minutes.
+            runbook_url: "https://github.com/cnuland/hello-chris-ai-ops-harness/docs/troubleshooting.md"
+
+    - name: aiops-bookinfo-crashloop
+      rules:
+        # CrashLoopBackOff Alert
+        # Fires when any pod in the bookinfo namespace enters
+        # CrashLoopBackOff state. This matches Scenario B
+        # (bad config env var in ratings-v1).
+        - alert: BookinfoCrashLoopBackOff
+          expr: |
+            kube_pod_container_status_waiting_reason{
+              namespace="bookinfo",
+              reason="CrashLoopBackOff"
+            } > 0
+          for: 1m
+          labels:
+            severity: critical
+            aiops-harness: "true"
+            scenario: crashloop
+          annotations:
+            summary: "CrashLoopBackOff detected in bookinfo namespace"
+            description: >-
+              Container {{ $labels.container }} in pod {{ $labels.pod }}
+              is in CrashLoopBackOff state.
+            runbook_url: "https://github.com/cnuland/hello-chris-ai-ops-harness/docs/troubleshooting.md"

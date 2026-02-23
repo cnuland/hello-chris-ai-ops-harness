@@ -1,0 +1,101 @@
+# MLFlow — AIOps Pipeline Tracker
+#
+# Tracks the AIOps investigation pipeline's behavior.
+# Each Llama Stack agent session = one MLFlow run.
+#
+# Logs: model ID, scenario, tool calls made, evidence retrieved,
+# per-tool latency, total investigation time, MTTD, final RCA output.
+#
+# This is the PIPELINE side of experiment tracking.
+# The HARNESS side uses a separate MLFlow instance (mlflow-harness.yaml).
+#
+# NOTE: This is a development stub using SQLite. Production deployments
+# should use PostgreSQL for the backend store and S3/MinIO for artifacts.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow-aiops
+  namespace: mlflow-aiops
+  labels:
+    app: mlflow-aiops
+    component: experiment-tracking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow-aiops
+  template:
+    metadata:
+      labels:
+        app: mlflow-aiops
+        component: experiment-tracking
+    spec:
+      containers:
+        - name: mlflow
+          image: ghcr.io/mlflow/mlflow:latest
+          command: ["mlflow"]
+          args:
+            - "server"
+            - "--host=0.0.0.0"
+            - "--port=5000"
+            - "--backend-store-uri=sqlite:///mlflow/mlflow.db"
+            - "--default-artifact-root=/mlflow/artifacts"
+          ports:
+            - containerPort: 5000
+              name: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: mlflow-data
+              mountPath: /mlflow
+      volumes:
+        - name: mlflow-data
+          persistentVolumeClaim:
+            claimName: mlflow-aiops-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-aiops
+  namespace: mlflow-aiops
+  labels:
+    app: mlflow-aiops
+spec:
+  ports:
+    - port: 5000
+      targetPort: 5000
+      name: http
+  selector:
+    app: mlflow-aiops
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-aiops-data
+  namespace: mlflow-aiops
+  labels:
+    app: mlflow-aiops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

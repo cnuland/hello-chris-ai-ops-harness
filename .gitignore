@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Benchmark artifacts (run-specific, not for version control)
+artifacts/
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+*.cert
+*.crt
+credentials.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak-*

@@ -1,5 +1,16 @@
 # Agent configuration for AIOps harness scenarios
-# This defines how the harness runner invokes the Llama Stack agent
+#
+# This defines how the harness runner invokes the AIOps pipeline
+# and how the eval model fact-checks the pipeline's output.
+#
+# Architecture:
+#   - The EVALUATED model runs inside Llama Stack (llama-stack namespace).
+#     It investigates the incident and produces RCA output.
+#   - The EVAL model is external to Llama Stack. It independently
+#     fact-checks the pipeline's output by querying the same telemetry
+#     sources and inspecting Llama Stack session telemetry.
+#   - The eval model is configurable: any model accessible via an
+#     OpenAI-compatible API can serve as the evaluator.
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -10,16 +21,40 @@ metadata:
     app: aiops-harness
 data:
   agent-config.yaml: |
-    # Llama Stack agent configuration for AIOps investigation
+    # --- AIOps Pipeline (the system being evaluated) ---
+
+    # Llama Stack agent runtime — wraps vLLM, manages ReAct loop
+    llama_stack_url: "http://llama-stack-aiops.llama-stack.svc:8080"
+
+    # Model served inside Llama Stack (via vLLM backend)
     model_id: "granite-4"
-    llama_stack_url: "http://granite-4-server.llm-serving.svc.cluster.local:8080"
+
+    # Tools server — provides investigative tools to the agent
     tools_server_url: "http://aiops-tools-server.aiops-harness.svc:8000"
 
-    # Agent behavior
+    # --- Eval Model (the fact-checker, external to Llama Stack) ---
+
+    # The eval model independently verifies pipeline claims by:
+    #   1. Inspecting Llama Stack session telemetry (tool call logs)
+    #   2. Querying the same telemetry sources (Prometheus, K8s events)
+    #   3. Evaluating whether evidence supports the pipeline's conclusions
+    #
+    # Any OpenAI-compatible endpoint works. Examples:
+    #   - Another vLLM instance: http://qwen3-server.llm-serving.svc:8080
+    #   - SaaS baseline: https://generativelanguage.googleapis.com/v1beta/openai
+    #   - Same model (self-eval, not recommended): same as llama_stack_url
+    eval_model_url: "http://qwen3-server.llm-serving.svc.cluster.local:8080"
+    eval_model_id: "qwen3-coder-next"
+
+    # --- Agent behavior ---
     max_tokens: 4096
     timeout_seconds: 300
 
-    # Available tools for the agent
+    # --- MLFlow tracking ---
+    mlflow_aiops_url: "http://mlflow-aiops.mlflow-aiops.svc:5000"
+    mlflow_harness_url: "http://mlflow-harness.mlflow-harness.svc:5000"
+
+    # --- Available tools for the AIOps agent ---
     tools:
       - name: getMetricHistory
         endpoint: /tools/getMetricHistory
@@ -33,8 +68,11 @@ data:
       - name: getTraceWaterfall
         endpoint: /tools/getTraceWaterfall
         description: "Retrieve distributed trace data"
+      - name: searchDocumentation
+        endpoint: /tools/searchDocumentation
+        description: "Search OpenShift and SRE documentation (RAG)"
 
-    # System prompt for the SRE agent
+    # System prompt for the SRE agent (inside Llama Stack)
     system_prompt: |
       You are an expert SRE AI agent investigating an operational incident
       in a Kubernetes-based microservices application called Bookinfo.
@@ -43,3 +81,6 @@ data:
       Use the available tools to investigate the incident systematically.
       Query metrics, check Kubernetes events, and search logs to identify
       the root cause. Provide your findings in a structured format.
+      If you are unsure about the correct PromQL metric name or query
+      syntax, make ONE quick documentation search first, then immediately
+      move on to querying live systems.

@@ -1,24 +1,23 @@
-# vLLM Model Serving - Plain Deployment
-# Deploys ibm-granite/granite-4.0-h-tiny via vLLM on H200 MIG slice
-# Uses RHAIIS vllm-cuda-rhel9 image with nvidia runtimeClass
-# MIG profile: 1g.18gb (18 GB VRAM, 16 SMs) - sufficient for tiny model
+# Qwen3-Coder-Next FP8 — Community vLLM v0.15.1
+# 80B MoE (3B active), FP8 quantized, on 2x H200 GPUs
+# Uses community vLLM cu130-nightly image for CUDA 13.0 driver compat
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: granite-4-server
+  name: qwen3-coder-next
   namespace: llm-serving
   labels:
-    app: granite-4-server
+    app: qwen3-coder-next
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: granite-4-server
+      app: qwen3-coder-next
   template:
     metadata:
       labels:
-        app: granite-4-server
+        app: qwen3-coder-next
     spec:
       runtimeClassName: nvidia
       serviceAccountName: granite-sa
@@ -29,23 +28,19 @@ spec:
           effect: NoSchedule
       containers:
         - name: vllm
-          image: registry.redhat.io/rhaiis/vllm-cuda-rhel9@sha256:094db84a1da5e8a575d0c9eade114fa30f4a2061064a338e3e032f3578f8082a
-          command:
-            - /bin/bash
-            - -c
+          image: vllm/vllm-openai:cu130-nightly
           args:
-            - |
-              echo "Downloading model..."
-              vllm serve ibm-granite/granite-4.0-h-tiny \
-                --served-model-name granite-4 \
-                --port 8080 \
-                --max-model-len 8192 \
-                --tensor-parallel-size 1 \
-                --trust-remote-code \
-                --disable-uvicorn-access-log \
-                --dtype bfloat16 \
-                --enable-auto-tool-choice \
-                --tool-call-parser hermes
+            - --model=Qwen/Qwen3-Coder-Next-FP8
+            - --served-model-name=qwen3-coder-next
+            - --port=8080
+            - --max-model-len=32768
+            - --tensor-parallel-size=2
+            - --trust-remote-code
+            - --enable-auto-tool-choice
+            - --tool-call-parser=qwen3_coder
+            - --gpu-memory-utilization=0.90
+            - --kv-cache-dtype=fp8
+            - --disable-uvicorn-access-log
           env:
             - name: HOME
               value: /tmp
@@ -67,13 +62,13 @@ spec:
               protocol: TCP
           resources:
             limits:
-              cpu: "4"
-              memory: 32Gi
-              nvidia.com/mig-1g.18gb: "1"
+              cpu: "8"
+              memory: 64Gi
+              nvidia.com/gpu: "2"
             requests:
-              cpu: "4"
-              memory: 32Gi
-              nvidia.com/mig-1g.18gb: "1"
+              cpu: "8"
+              memory: 64Gi
+              nvidia.com/gpu: "2"
           volumeMounts:
             - mountPath: /dev/shm
               name: shm
@@ -83,20 +78,20 @@ spec:
         - name: shm
           emptyDir:
             medium: Memory
-            sizeLimit: 12Gi
+            sizeLimit: 16Gi
         - name: model-cache
           emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: granite-4-server
+  name: qwen3-coder-next
   namespace: llm-serving
   labels:
-    app: granite-4-server
+    app: qwen3-coder-next
 spec:
   selector:
-    app: granite-4-server
+    app: qwen3-coder-next
   ports:
     - port: 8080
       targetPort: 8080

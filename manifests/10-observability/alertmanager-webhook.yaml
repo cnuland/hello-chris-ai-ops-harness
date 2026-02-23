@@ -1,0 +1,60 @@
+# AlertManager Webhook Configuration for AIOps Harness
+#
+# Routes alerts with label aiops-harness: "true" to the webhook
+# receiver in the aiops-harness namespace. The receiver creates a
+# Llama Stack agent session with the alert payload, triggering
+# autonomous investigation.
+#
+# On OpenShift 4.21+, AlertManager is managed by the cluster monitoring
+# operator. This AlertManagerConfig CR extends the default configuration
+# without replacing it.
+#
+# NOTE: This is a stub. The actual webhook receiver service
+# (alert-receiver) needs to be implemented as part of the harness.
+---
+apiVersion: monitoring.coreos.com/v1beta1
+kind: AlertmanagerConfig
+metadata:
+  name: aiops-harness-webhook
+  namespace: aiops-harness
+  labels:
+    app: aiops-harness
+spec:
+  route:
+    groupBy:
+      - namespace
+      - alertname
+    groupWait: 10s
+    groupInterval: 30s
+    repeatInterval: 1h
+    matchers:
+      - name: aiops-harness
+        matchType: "="
+        value: "true"
+    receiver: aiops-webhook
+
+  receivers:
+    - name: aiops-webhook
+      webhookConfigs:
+        - url: "http://alert-receiver.aiops-harness.svc:8080/alert"
+          sendResolved: true
+          httpConfig:
+            followRedirects: true
+---
+# Placeholder Service for the alert webhook receiver
+# TODO: Implement the alert-receiver as a lightweight HTTP service
+# that creates a Llama Stack agent session from the alert payload
+apiVersion: v1
+kind: Service
+metadata:
+  name: alert-receiver
+  namespace: aiops-harness
+  labels:
+    app: alert-receiver
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  selector:
+    app: alert-receiver

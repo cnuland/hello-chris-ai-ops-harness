@@ -1,0 +1,106 @@
+# Llama Stack AIOps Agent Runtime
+#
+# Deploys the Llama Stack agent runtime for the AIOps investigation pipeline.
+# Llama Stack wraps the vLLM model serving backend and provides agent
+# orchestration: ReAct loop management, tool routing, safety guardrails,
+# and session state.
+#
+# The harness evaluates this pipeline — it is NOT part of the harness itself.
+# The harness has read access to Llama Stack telemetry (agent sessions,
+# tool call logs) for independent fact-checking, but cannot influence
+# the investigation while it runs.
+#
+# Prerequisites:
+#   - vLLM model serving deployed in llm-serving namespace
+#   - Tools server deployed in aiops-harness namespace
+#   - llama-stack-aiops-config ConfigMap applied
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-stack-aiops
+  namespace: llama-stack
+  labels:
+    app: llama-stack-aiops
+    component: agent-runtime
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: llama-stack-aiops
+  template:
+    metadata:
+      labels:
+        app: llama-stack-aiops
+        component: agent-runtime
+    spec:
+      containers:
+        - name: llama-stack
+          image: llamastack/distribution-starter:latest
+          imagePullPolicy: Always
+          command: ["llama"]
+          args: ["stack", "run", "/app/run.yaml", "--port", "8080"]
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: HOME
+              value: /app-data
+            - name: LLAMA_STACK_PORT
+              value: "8080"
+            - name: SQLITE_STORE_DIR
+              value: /app-data/sqlite
+            - name: FILES_STORAGE_DIR
+              value: /app-data/files
+            # vLLM backend URL — change to evaluate different models
+            - name: INFERENCE_URL
+              value: "http://granite-4-server.llm-serving.svc.cluster.local:8080/v1"
+            # Tools server URL — provides investigative tools to the agent
+            - name: TOOLS_SERVER_URL
+              value: "http://aiops-tools-server.aiops-harness.svc:8000"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          volumeMounts:
+            - name: llama-data
+              mountPath: /app-data
+            - name: config
+              mountPath: /app/run.yaml
+              subPath: run.yaml
+      volumes:
+        - name: llama-data
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: llama-stack-aiops-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-stack-aiops
+  namespace: llama-stack
+  labels:
+    app: llama-stack-aiops
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  selector:
+    app: llama-stack-aiops

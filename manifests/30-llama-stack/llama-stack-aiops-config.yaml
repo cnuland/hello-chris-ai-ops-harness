@@ -1,0 +1,83 @@
+# Llama Stack AIOps Agent Configuration
+#
+# This ConfigMap provides the run.yaml that Llama Stack uses to configure
+# its APIs, providers, and model registry.
+#
+# The evaluated model is served by vLLM in the llm-serving namespace.
+# Change model_id and provider URL below to evaluate different models.
+#
+# The eval model (used by the harness for fact-checking) is configured
+# separately in the harness's agent-config.yaml — it is external to
+# this Llama Stack instance.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llama-stack-aiops-config
+  namespace: llama-stack
+  labels:
+    app: llama-stack-aiops
+data:
+  run.yaml: |
+    version: "2"
+    image_name: remote-vllm
+
+    # APIs exposed by this Llama Stack instance
+    apis:
+      - agents       # Agent orchestration (ReAct loop, sessions)
+      - inference     # Model inference (proxied to vLLM)
+      - tool_runtime  # Tool dispatch to the tools server
+      - safety        # Safety guardrails (Llama Guard or custom shields)
+
+    providers:
+      inference:
+        - provider_id: vllm-inference
+          provider_type: remote::vllm
+          config:
+            # Points to the vLLM model server in llm-serving namespace
+            # Change this URL to switch the model being evaluated
+            url: http://granite-4-server.llm-serving.svc.cluster.local:8080/v1
+            max_tokens: 4096
+
+      agents:
+        - provider_id: meta-reference
+          provider_type: inline::meta-reference
+          config:
+            persistence_store:
+              type: sqlite
+              db_path: /app-data/sqlite/agents.db
+
+      tool_runtime:
+        # TODO: Configure tool runtime to dispatch to the AIOps tools server
+        # The tools server at http://aiops-tools-server.aiops-harness.svc:8000
+        # exposes: getMetricHistory, getK8sEvents, searchLogs, getTraceWaterfall,
+        # and searchDocumentation (RAG)
+        - provider_id: aiops-tools
+          provider_type: inline::rag-runtime
+          config: {}
+
+      safety:
+        # TODO: Configure safety shields (Llama Guard or custom)
+        # Shields enforce remediation boundaries:
+        #   - scaling, restarting = allowed
+        #   - namespace deletion, RBAC changes = blocked
+        []
+
+    metadata_store:
+      type: sqlite
+      db_path: /app-data/sqlite/registry.db
+
+    # Model registry — maps model_id to vLLM backend
+    models:
+      - metadata: {}
+        model_id: granite-4
+        provider_id: vllm-inference
+        provider_model_id: granite-4
+        model_type: llm
+
+    shields: []
+    vector_dbs: []
+    datasets: []
+    scoring_fns: []
+    benchmarks: []
+    tool_groups: []
