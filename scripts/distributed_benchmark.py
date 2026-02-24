@@ -552,7 +552,7 @@ def score_run(truth: dict, output: dict) -> dict:
         "rca_detected": rca_detected,
         "action_safety": _score_action_safety(output),
         "auditability": _score_auditability(output),
-        "rca_eval": 0.0,  # placeholder until judge matrix completes
+        "rca_eval": 0.0,  # placeholder until eval model scoring completes
     }
     weighted = round(sum(scores[k] * WEIGHTS[k] for k in scores), 4)
     rca_pass = rca_detected == 1.0
@@ -589,7 +589,7 @@ def _count_causes_found(output: dict, truth: dict) -> int:
 
 
 def rescore_with_eval(score: dict, judge_scores: dict) -> dict:
-    """Recalculate weighted score after cross-model judge eval completes."""
+    """Recalculate weighted score after eval model scoring completes."""
     scores = dict(score["category_scores"])
     peer_overalls = [
         js["overall"] for js in judge_scores.values()
@@ -611,7 +611,7 @@ def rescore_with_eval(score: dict, judge_scores: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Cross-model RCA judge (extended for multi-cause)
+# RCA Eval — eval model scoring (extended for multi-cause)
 # ---------------------------------------------------------------------------
 
 DISTRIBUTED_JUDGE_SYSTEM_PROMPT = """\
@@ -740,7 +740,7 @@ async def judge_rca(judge_key: str, judge_cfg: dict,
 
 
 async def run_judge_matrix(results: dict, truth: dict) -> dict:
-    """Run cross-evaluation for the distributed scenario."""
+    """Run eval model scoring for the distributed scenario (cross-model validation)."""
     judge_matrix = {mk: {} for mk in results}
     tasks = []
 
@@ -1052,9 +1052,9 @@ async def run_benchmark():
     except Exception as e:
         log.warning(f"Config cleanup failed: {e}")
 
-    # --- Phase 9: Cross-model RCA judge ---
+    # --- Phase 9: Eval Model Scoring ---
     log.info(f"\n{'='*60}")
-    log.info("Phase 9: Cross-model RCA evaluation (distributed scenario)")
+    log.info("Phase 9: Eval model scoring (distributed scenario)")
     log.info(f"{'='*60}")
 
     judge_matrix = await run_judge_matrix(results, truth)
@@ -1210,10 +1210,10 @@ async def run_benchmark():
         row["rca_eval"] = f"{avg:.1f}/10"
         eval_rows.append(row)
 
-    print("\nCross-Model RCA Eval Matrix (Distributed Scenario)")
+    print("\nEval System Validation Matrix (Distributed Scenario)")
     print(_box_table(eval_cols, eval_rows))
     print("  (Each cell = row model's RCA scored by column model, 1-10 scale)")
-    print("  (Judges evaluate multi-cause detection: did the agent find BOTH root causes?)")
+    print("  (Eval scores assess multi-cause detection: did the agent find BOTH root causes?)")
 
     print(f"\nFull artifacts: {output_dir}")
     print("=" * 80)

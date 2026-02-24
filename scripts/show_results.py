@@ -21,14 +21,15 @@ console = Console()
 
 WEIGHT_LABELS = {
     "detection": ("Detection", "Identified an incident"),
-    "correlation": ("Correlation", "Gathered evidence via tools"),
-    "rca": ("Root Cause", "Correct RCA hypothesis"),
+    "correlation": ("Correlation", "Grouped related signals"),
+    "rca_detected": ("RCA Detected", "Binary gate: named root cause"),
+    "rca_eval": ("RCA Eval", "Eval model investigation quality"),
     "action_safety": ("Action Safety", "Safe remediation advice"),
     "auditability": ("Auditability", "Traceable reasoning chain"),
 }
 
-WEIGHTS = {"detection": 0.15, "correlation": 0.15, "rca": 0.35,
-           "action_safety": 0.20, "auditability": 0.15}
+WEIGHTS = {"detection": 0.10, "correlation": 0.10, "rca_detected": 0.05,
+           "rca_eval": 0.50, "action_safety": 0.10, "auditability": 0.15}
 
 
 def score_bar(score: float, width: int = 20) -> Text:
@@ -206,21 +207,21 @@ def show_results(run_dir: Path):
                           style="dim" if is_empty else "")
         console.print()
 
-    # --- Cross-Model Judge Matrix ---
+    # --- Eval Model Scoring / Validation Matrix ---
     has_judges = any(m.get("judge_scores") for m in models.values())
     if has_judges:
-        console.print(Rule("Cross-Model RCA Judge Matrix", style="cyan"))
+        console.print(Rule("Eval System Validation Matrix", style="cyan"))
         console.print()
 
         judge_table = Table(
-            title="Each model scores the others' RCA quality (1-10)",
+            title="Eval model assessment of each investigation (1-10)",
             show_header=True, header_style="bold cyan",
             border_style="blue", pad_edge=True, expand=True,
         )
-        judge_table.add_column("RCA by →", style="bold", min_width=16)
+        judge_table.add_column("Investigation →", style="bold", min_width=16)
         for mk in models:
             short = models[mk]["name"].split("(")[0].strip()
-            judge_table.add_column(f"Judged by\n{short}", justify="center", min_width=14)
+            judge_table.add_column(f"Scored by\n{short}", justify="center", min_width=14)
         judge_table.add_column("Avg", justify="center", style="bold", min_width=8)
 
         for sk, sm in models.items():
@@ -253,7 +254,7 @@ def show_results(run_dir: Path):
             js_all = sm.get("judge_scores", {})
             if not js_all:
                 continue
-            console.print(f"  [bold]{s_name}[/bold] — judge feedback:")
+            console.print(f"  [bold]{s_name}[/bold] — eval feedback:")
             for jk, js in js_all.items():
                 if jk == sk:
                     continue

@@ -11,7 +11,7 @@ Every benchmark run logs to two MLFlow instances:
   2. Harness Evaluation Tracker (mlflow-harness):
      Tracks how well the pipeline investigated, based on harness scoring.
      Each harness evaluation = one MLFlow run.
-     Metrics: 6 scoring dimensions, weighted score, PASS/FAIL, judge matrix.
+     Metrics: 6 scoring dimensions, weighted score, PASS/FAIL, eval model assessment.
 
 This separation maintains the External Independence Principle:
 the pipeline team sees investigation metrics, the evaluation team

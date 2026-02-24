@@ -1,7 +1,7 @@
 # AIOps Harness Demo — Video Recording Guide
 
 Step-by-step walkthrough. Every command is copy-paste ready.
-Total runtime: ~10-12 minutes on camera (assuming infrastructure is already deployed).
+Total runtime: ~12-15 minutes on camera (assuming infrastructure is already deployed).
 
 ---
 
@@ -14,15 +14,18 @@ Make sure everything is deployed and healthy. Run these checks:
 oc whoami
 
 # Check all pods are running
-oc get pods -n llm-serving       # granite-4-server should be 1/1 Running
-oc get pods -n bookinfo           # all 7 pods should be 1/1 Running
-oc get pods -n aiops-harness      # aiops-tools-server should be 1/1 Running
+oc get pods -n llm-serving       # granite-4-server, qwen3-coder-next should be Running
+oc get pods -n llama-stack       # llama-stack-aiops should be Running
+oc get pods -n bookinfo          # all 7 pods should be 1/1 Running
+oc get pods -n aiops-harness     # aiops-tools-server should be 1/1 Running
+oc get pods -n mlflow-aiops      # mlflow pod should be Running
+oc get pods -n mlflow-harness    # mlflow pod should be Running
 
 # Quick health check on the tools server
 oc exec deploy/aiops-tools-server -n aiops-harness -- curl -s http://localhost:8000/healthz
 
-# Quick health check on vLLM
-oc exec deploy/granite-4-server -n llm-serving -- curl -s http://localhost:8080/v1/models
+# Quick health check on Llama Stack
+oc exec deploy/llama-stack-aiops -n llama-stack -- curl -s http://localhost:8080/v1/models
 ```
 
 If anything is missing, deploy with:
@@ -43,8 +46,9 @@ Start recording. Open a terminal.
 
 **Talk track:** "This is a demo of an external AIOps test harness running on OpenShift.
 The key idea: the harness is independent from the AI system it evaluates. It controls
-fault injection, evidence capture, and scoring — the AI model only sees evidence through
-structured tool calls."
+fault injection, evidence capture, and scoring. The AI model only sees evidence through
+structured tool calls, and an external eval model fact-checks the results using only
+the data the harness provides."
 
 ### Show what's running
 
@@ -55,17 +59,22 @@ oc whoami --show-server
 ```
 
 ```bash
-# Show all four namespaces
+# Show the key namespaces
 oc get pods -n llm-serving -o wide
+oc get pods -n llama-stack
 oc get pods -n bookinfo
 oc get pods -n aiops-harness
+oc get pods -n mlflow-aiops
+oc get pods -n mlflow-harness
 ```
 
-**Talk track:** "We have four components:
-1. **vLLM** serving IBM Granite 4 on an A100 GPU — this is our AI 'brain'
-2. **Bookinfo** — the system under test, a microservices app with 6 services
-3. **Tools Server** — a FastAPI gateway to Prometheus metrics, K8s events, and logs
-4. **Harness Runner** — the orchestrator that runs as a Kubernetes Job"
+**Talk track:** "We have six key components:
+1. **vLLM** serving multiple models on H200 GPUs — Granite 4 and Qwen3-Coder-Next
+2. **Llama Stack** wrapping vLLM to provide the agent runtime — ReAct loop, tool dispatch, session management
+3. **Bookinfo** — the system under test, a microservices app with 6 services
+4. **Tools Server** — a FastAPI gateway providing Prometheus metrics, K8s events, logs, and documentation search
+5. **Harness Runner** — the orchestrator that runs as a Kubernetes Job
+6. **MLFlow** — two instances tracking pipeline behavior and evaluation results separately"
 
 ### Show the Bookinfo app is live
 
@@ -83,7 +92,37 @@ oc logs deploy/traffic-generator -n bookinfo --tail=5
 
 ---
 
-## Part 2: Show the Harness Manifest (1 min)
+## Part 2: Show the Architecture (1-2 min)
+
+**Talk track:** "The architecture has three planes that are physically separated:
+
+- The **Evidence Plane** — Prometheus, OpenTelemetry, K8s API. It records what happens.
+- The **AIOps Plane** — Llama Stack agent backed by vLLM. It investigates incidents using tools. It cannot access ground truth or the harness.
+- The **Harness Plane** — The orchestrator, scoring engine, and eval model. It's the only component with access to ground truth.
+
+The eval model must exist **outside** the system being evaluated. It only sees the data the harness provides — the pipeline's output, tool call logs, and ground truth. It cannot query Prometheus or Kubernetes directly. This is what makes the evaluation honest."
+
+### Show the agent configuration
+
+```bash
+# Show how the agent is configured
+oc get configmap aiops-agent-config -n aiops-harness -o jsonpath='{.data.agent-config\.yaml}' | head -40
+```
+
+Point out on screen:
+- `llama_stack_url` — the Llama Stack endpoint (agent runtime)
+- `model_id` — which model runs inside the pipeline
+- `tools_server_url` — where the agent's investigative tools live
+- `eval_model_url` / `eval_model_id` — the external eval model (separate from the pipeline)
+- `system_prompt` — instructions for the SRE agent
+
+**Talk track:** "Notice the eval model is a completely separate endpoint. It's not
+the same model that runs the investigation — it's an independent model that fact-checks
+the investigation using only what the harness gives it."
+
+---
+
+## Part 3: Show the Harness Manifest and Tools (1-2 min)
 
 **Talk track:** "Each scenario is defined declaratively in a HarnessManifest.
 It specifies what to break, how to score, and what evidence to collect."
@@ -97,174 +136,173 @@ Point out on screen:
 - `fault.type: crashloop_bad_config` — what we're injecting
 - `fault.targetSelector.name: ratings-v1` — which service we're targeting
 - `fault.parameters` — the bad env var that causes the crash
-- `scoring.weights` — RCA is weighted heaviest at 35%
-- `scoring.passThreshold: 0.60` — the minimum score to pass
 
 **Talk track:** "The harness knows the ground truth because it controls the injection.
 The AI model does NOT know what was injected — it has to figure it out using tools."
 
----
-
-## Part 3: Show the Tools Contract (1 min)
-
-**Talk track:** "The AI model doesn't get raw telemetry dumped into its context.
-Instead, it gets tool definitions — functions it can call to query evidence."
+### Show the tools contract
 
 ```bash
 # Show the tools server endpoints
 oc exec deploy/aiops-tools-server -n aiops-harness -- curl -s http://localhost:8000/openapi.json | python3 -m json.tool | head -40
 ```
 
-Or just describe them verbally:
+Describe the tools:
 - `getMetricHistory` — runs PromQL queries against Prometheus/Thanos
 - `getK8sEvents` — fetches Kubernetes events (pod crashes, restarts, scheduling)
 - `searchLogs` — searches pod logs for error patterns
-- `getTraceWaterfall` — distributed tracing (placeholder)
+- `searchDocumentation` — RAG search against OpenShift docs and SRE runbooks
 
-**Talk track:** "This is the tool-based retrieval pattern from the whitepaper.
-The model decides what to query, the tools server executes it, and the results
-come back as structured data. This keeps the evidence auditable."
-
----
-
-## Part 4: Run the CrashLoopBackOff Scenario (3-4 min)
-
-**Talk track:** "Let's run it. The harness will: capture a baseline, inject a fault,
-wait for it to propagate, collect evidence, invoke the AI agent, score the result,
-and clean up."
-
-```bash
-./scripts/21_run_harness_crashloop.sh
-```
-
-The script will stream logs in real time. Narrate each phase as it appears:
-
-| Log line | What to say |
-|----------|-------------|
-| `Phase 1: Baseline (30s)` | "Capturing healthy-state metrics so we have a comparison point" |
-| `Phase 2: Inject fault` | "Now injecting a bad environment variable into ratings-v1 — this will cause a CrashLoopBackOff" |
-| `Injected CrashLoopBackOff into bookinfo/ratings-v1` | "The fault is in. The harness knows exactly what it did." |
-| `Phase 3: Waiting for fault propagation (60s)` | "Waiting for Kubernetes to detect the crash and start restart cycling" |
-| `Phase 4: Capture evidence` | "Now querying Prometheus for CPU, memory, restart counts, and pulling K8s events" |
-| `HTTP Request: POST .../getMetricHistory` | "Each of these is a real Prometheus query via our tools server" |
-| `HTTP Request: POST .../getK8sEvents` | "Kubernetes events will show the CrashLoopBackOff reason" |
-| `Phase 5: Invoke Llama Stack agent` | "Now sending the evidence summary plus tool definitions to Granite 4" |
-| `HTTP Request: POST .../v1/chat/completions` | "The model is reasoning about the incident..." |
-| `Agent tool call: ...` | "The model decided to make a tool call — it's investigating on its own" |
-| `Phase 6: Score agent output` | "Comparing the agent's answer against ground truth" |
-| `Phase 7: Cleanup injection` | "Removing the bad env var — ratings-v1 will recover" |
-| `Score: 0.90  Result: PASS  RCA: 1.0` | "The agent correctly identified the root cause. 90% composite score, perfect RCA." |
-
-While waiting during the baseline/propagation phases, you can show the fault in action:
-
-```bash
-# In a second terminal — show the pod crash-looping (run this during Phase 3)
-oc get pods -n bookinfo -w
-```
-
-You'll see `ratings-v1` go to `CrashLoopBackOff` and then recover after Phase 7.
+**Talk track:** "The model decides what to query, the tools server executes it, and the results
+come back as structured data. Every tool call is logged — this is the audit trail."
 
 ---
 
-## Part 5: Fetch and Walk the Artifacts (2-3 min)
+## Part 4: Run the Benchmark (4-5 min)
+
+**Talk track:** "Now let's run the full benchmark. This injects a CPU saturation fault,
+then has multiple models investigate the incident. Each model runs independently through
+Llama Stack, and then the eval model scores each investigation."
 
 ```bash
-./scripts/30_fetch_artifacts.sh
+python3 scripts/local_benchmark.py
 ```
 
-**Talk track:** "The harness produces four contract artifacts. Let me walk through each one."
+The script will stream output in real time. Narrate each phase as it appears:
 
-### run.json — Run metadata
+| Output | What to say |
+|--------|-------------|
+| `Injecting CPU stress sidecar...` | "Injecting a CPU saturation fault into reviews-v2 — a stress container that consumes 95% CPU" |
+| `Waiting for fault propagation (120s)` | "Giving the fault time to manifest in Prometheus metrics and Kubernetes events" |
+| `Running model: granite-4 (via Llama Stack)` | "Now Granite 4, a 1B-parameter model, is investigating through Llama Stack" |
+| `Tool call: getMetricHistory(...)` | "The agent decided to query Prometheus for CPU metrics — this is a real tool call" |
+| `Tool call: getK8sEvents(...)` | "Now checking Kubernetes events for pod health issues" |
+| `Tool call: searchDocumentation(...)` | "The agent is searching documentation for the right PromQL metric name — RAG in action" |
+| `Model complete: 0.81 (PASS)` | "Granite scored 0.81 with RAG augmentation — documentation search helped it find the right metrics" |
+| `Running model: qwen3-coder-next (via Llama Stack)` | "Now Qwen3, an 80B model, gets its turn — same fault, same tools, independent investigation" |
+| `Eval model scoring...` | "The external eval model is now fact-checking each investigation — using only the harness-provided data" |
+| `Logging to MLFlow...` | "Results are being tracked in MLFlow for regression testing" |
+
+While waiting, you can show the fault in action:
 
 ```bash
-cat artifacts/latest/run.json | python3 -m json.tool
+# In a second terminal — show CPU spike in the pod
+oc top pods -n bookinfo
+```
+
+---
+
+## Part 5: Show Results and MLFlow (3-4 min)
+
+### Terminal results
+
+```bash
+python3 scripts/show_results.py
+```
+
+Walk through the output:
+- **Model cards** — each model's composite score, PASS/FAIL, tool call count, investigation time
+- **Score breakdown** — six dimensions: Detection, Correlation, RCA Detected (binary gate), RCA Eval (eval model score), Action Safety, Auditability
+- **RCA Hypotheses** — what each model concluded as the root cause
+- **Investigation Detail** — the actual tool calls each model made
+
+**Talk track:** "RCA Detected is a binary gate — did the model name the right root cause?
+RCA Eval is the heavy hitter at 50% of the total weight. The external eval model
+scores the investigation quality: was the evidence real? Was the reasoning sound?
+Was the remediation safe? A model can pass the gate but still fail overall if the
+eval model determines the evidence was hallucinated."
+
+### MLFlow dashboards
+
+```bash
+# Get the MLFlow routes
+oc get routes -n mlflow-aiops -o jsonpath='{.items[0].spec.host}' && echo ""
+oc get routes -n mlflow-harness -o jsonpath='{.items[0].spec.host}' && echo ""
+```
+
+Open both URLs in a browser:
+
+**AIOps MLFlow** — "This tracks the pipeline's behavior: which model ran, what tool calls
+it made, how long the investigation took, and the full RCA output."
+
+**Harness MLFlow** — "This tracks the evaluation results: all six scoring dimensions,
+the eval model's assessment, PASS/FAIL, and the weighted composite. These are
+physically separated — the pipeline team sees their own metrics, the evaluation team
+sees theirs."
+
+**Talk track:** "MLFlow is the central tracking backbone. Every run produces records
+here. You can compare models across runs, detect regressions when you change prompts
+or configurations, and build a history of measured capability over time."
+
+---
+
+## Part 6: Walk the Artifacts (2 min)
+
+```bash
+# Show the latest benchmark artifacts
+ls artifacts/benchmark-*/
+```
+
+Walk through key files:
+
+```bash
+# Ground truth — what the harness injected (never shown to the agent)
+cat artifacts/benchmark-*/truth.json | python3 -m json.tool | head -10
+```
+
+```bash
+# Agent output — what one model concluded (pick the best performer)
+cat artifacts/benchmark-*/granite-ls/aiops_output.json | python3 -m json.tool | head -30
 ```
 
 Point out:
-- `run_id` — unique identifier
-- `timestamps` — every phase is timestamped for reproducibility
-- `status: completed` — the run finished successfully
-
-### truth.json — Ground truth
-
-```bash
-cat artifacts/latest/truth.json | python3 -m json.tool
-```
-
-Point out:
-- `root_cause.label: bookinfo/ratings-v1:crashloop_bad_config` — this is what the harness injected
-- `fault.parameters` — the exact env var and value
-- "The model never sees this file. It's only used for scoring."
-
-### aiops_output.json — What the AI produced
-
-```bash
-cat artifacts/latest/aiops_output.json | python3 -m json.tool
-```
-
-Point out:
-- `incident_summary` — the model's description of what happened
-- `rca_ranked` — the model's root cause hypotheses (should include `crashloop_bad_config`)
-- `recommended_action` — what the model suggests doing
-- `tool_calls` — the actual tool calls the model made (fully logged)
+- `rca_ranked` — the model's root cause hypotheses
+- `tool_calls` — the complete audit trail of every tool invocation
 - `evidence_links` — what evidence the model referenced
 
-**Talk track:** "Notice the tool_calls array — this is the audit trail. We can see
-exactly what the model queried and what it got back. This is the auditability
-dimension of the scoring rubric."
-
-### score.json — The scorecard
-
-```bash
-cat artifacts/latest/score.json | python3 -m json.tool
-```
-
-Point out each dimension:
-- `detection: 1.0` — "Did it detect an incident? Yes."
-- `correlation: 0.75` — "Did it group related signals? Mostly."
-- `rca: 1.0` — "Did it identify the correct root cause? Yes, top-ranked."
-- `action_safety: 0.7` — "Is the recommended action safe? Yes, no destructive commands."
-- `auditability: 1.0` — "Can we reconstruct the reasoning? Yes, tool calls + evidence logged."
-- `weighted_score: 0.9025` — "Composite score: 90.25%"
-- `result: PASS` — "Above the 60% threshold with RCA above 50%."
+**Talk track:** "This is the contract. Four artifacts per run: `run.json` (what we ran),
+`truth.json` (what actually happened), `aiops_output.json` (what the agent concluded),
+`score.json` (how it did). These are immutable governance artifacts — any auditor can
+reconstruct exactly what happened."
 
 ---
 
-## Part 6: Key Takeaways (1 min)
+## Part 7: Key Takeaways (1 min)
 
 **Talk track:**
 
-"Three things to take away:
+"Four things to take away:
 
 1. **The harness is external.** The AI model doesn't know it's being tested.
-   It gets an incident description and tools — that's it.
+   It gets an incident trigger and tools — that's it.
 
 2. **Tool-based retrieval, not telemetry dumping.** The model queries what it needs
-   through structured APIs. This keeps context windows manageable and evidence auditable.
+   through structured APIs. Every call is logged. This keeps evidence auditable.
 
-3. **The scoring is reproducible.** Same manifest, same injection, comparable scores.
-   You can swap the AI model — use a different LLM, a different provider — and the
-   harness doesn't change. Only the scores change.
+3. **The eval model is independent.** It exists outside the system being evaluated
+   and only sees what the harness provides. It can't access the cluster directly.
+   This is what makes the evaluation honest.
 
-That's the external harness pattern for AIOps evaluation."
+4. **Everything is tracked.** MLFlow captures every run, every score, every dimension.
+   You can swap models, change prompts, update RAG content — and measure the impact
+   with data, not guesswork.
+
+That's the harness-first AIOps architecture."
 
 ---
 
-## Optional: Run CPU Saturation Scenario
+## Optional: Show Scenario C (Distributed Cascading Failure)
 
-If you have time, run the second scenario:
-
-```bash
-./scripts/20_run_harness_cpu.sh
-```
-
-This injects CPU stress into `reviews-v2` instead. Same flow, different fault type.
-Fetch artifacts and compare scores:
+If you have time, run the distributed scenario:
 
 ```bash
-./scripts/30_fetch_artifacts.sh
-cat artifacts/latest/score.json | python3 -m json.tool
+python3 scripts/distributed_benchmark.py
 ```
+
+**Talk track:** "This injects TWO faults with a 60-second stagger — a CrashLoopBackOff
+in ratings-v1 at T+0 and CPU saturation in reviews-v2 at T+60. The agent has to find
+BOTH root causes and understand the temporal ordering. Finding both earns full credit,
+finding one earns partial credit."
 
 ---
 
@@ -286,4 +324,5 @@ oc delete jobs -l app=aiops-harness-runner -n aiops-harness --ignore-not-found
 - Set `export PS1='\n\$ '` for a clean prompt
 - Consider `export TERM=xterm-256color` for better colors
 - If the log output scrolls too fast, you can re-read it afterward: `oc logs -n aiops-harness job/<job-name>`
-- The harness run takes ~2-3 minutes total (30s baseline + 60s propagation + evidence + agent + scoring)
+- The benchmark run takes ~5-8 minutes total (injection + propagation + multiple models + eval scoring)
+- Have a second terminal ready to show `oc top pods -n bookinfo` during injection

@@ -4,7 +4,7 @@
 # Each harness run = one MLFlow run.
 #
 # Logs: six scoring dimensions, weighted composite, PASS/FAIL,
-# cross-model judge matrix, fact-checking results, hallucination flags.
+# eval model assessments, fact-checking results, hallucination flags.
 #
 # This is the HARNESS side of experiment tracking.
 # The PIPELINE side uses a separate MLFlow instance (mlflow-aiops.yaml).

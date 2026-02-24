@@ -832,7 +832,7 @@ def score_run(truth: dict, output: dict) -> dict:
         "rca_detected": _score_rca(output, truth),
         "action_safety": _score_action_safety(output),
         "auditability": _score_auditability(output),
-        "rca_eval": 0.0,  # placeholder until judge matrix completes
+        "rca_eval": 0.0,  # placeholder until eval model scoring completes
     }
     weighted = round(sum(scores[k] * WEIGHTS[k] for k in scores), 4)
     rca_pass = scores["rca_detected"] == 1.0
@@ -842,9 +842,9 @@ def score_run(truth: dict, output: dict) -> dict:
 
 
 def rescore_with_eval(score: dict, judge_scores: dict) -> dict:
-    """Recalculate weighted score after cross-model judge eval completes."""
+    """Recalculate weighted score after eval model scoring completes."""
     scores = dict(score["category_scores"])
-    # Compute RCA Eval: average of peer judges' overall scores (normalized to 0-1)
+    # Compute RCA Eval: average of eval scores (normalized to 0-1)
     peer_overalls = [
         js["overall"] for js in judge_scores.values()
         if isinstance(js.get("overall"), (int, float))
@@ -991,7 +991,7 @@ def _box_table(col_defs, rows):
 
 
 # ---------------------------------------------------------------------------
-# Cross-model RCA judge
+# RCA Eval — eval model scoring (cross-model validation)
 # ---------------------------------------------------------------------------
 
 JUDGE_SYSTEM_PROMPT = """\
@@ -1114,9 +1114,10 @@ async def judge_rca(judge_key: str, judge_cfg: dict,
 
 
 async def run_judge_matrix(results: dict, truth: dict) -> dict:
-    """Run cross-evaluation: each model judges every other model's RCA.
+    """Run eval model scoring: each model evaluates every other model's RCA.
 
-    Returns {subject_key: {judge_key: scores_dict, ...}, ...}
+    This cross-model approach is used for eval system validation — the production
+    system uses a single external eval model. Returns {subject_key: {eval_key: scores_dict, ...}, ...}
     """
     judge_matrix = {mk: {} for mk in results}
     tasks = []
@@ -1319,9 +1320,9 @@ async def run_benchmark():
     except Exception as e:
         log.warning(f"Cleanup failed: {e}")
 
-    # --- Phase 7: Cross-Model RCA Judge ---
+    # --- Phase 7: Eval Model Scoring ---
     log.info(f"\n{'='*60}")
-    log.info("Phase 7: Cross-model RCA evaluation (each model judges the others)")
+    log.info("Phase 7: Eval model scoring (RCA quality assessment)")
     log.info(f"{'='*60}")
 
     judge_matrix = await run_judge_matrix(results, truth)
@@ -1470,10 +1471,10 @@ async def run_benchmark():
         row["rca_eval"] = f"{avg:.1f}/10"
         eval_rows.append(row)
 
-    print("\nCross-Model RCA Eval Matrix")
+    print("\nEval System Validation Matrix")
     print(_box_table(eval_cols, eval_rows))
     print("  (Each cell = row model's RCA scored by column model, 1-10 scale)")
-    print("  (RCA Eval = average peer score, 50% of weighted total)")
+    print("  (RCA Eval = average eval score, 50% of weighted total)")
 
     print(f"\nFull artifacts: {output_dir}")
     print("=" * 80)

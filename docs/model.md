@@ -18,7 +18,7 @@ logs its results to two physically separated MLFlow instances:
 | MLFlow Instance | Namespace | What it Tracks |
 |----------------|-----------|---------------|
 | **MLFlow AIOps** | `mlflow-aiops` | Pipeline behavior: model ID, tool calls, evidence retrieved, per-tool latency, investigation time, MTTD, final RCA output |
-| **MLFlow Harness** | `mlflow-harness` | Evaluation results: six scoring dimensions, weighted composite, PASS/FAIL, cross-model judge matrix, fact-checking results, hallucination flags |
+| **MLFlow Harness** | `mlflow-harness` | Evaluation results: six scoring dimensions, weighted composite, PASS/FAIL, eval model assessments, fact-checking results, hallucination flags |
 
 This dual-instance design maintains the **External Independence Principle**: the
 pipeline team sees their metrics, the evaluation team sees theirs, and neither
@@ -45,7 +45,7 @@ oc get route mlflow-harness -n mlflow-harness -o jsonpath='{.spec.host}'
 Each MLFlow run contains:
 - **Parameters**: model ID, scenario, tool count, RAG enabled flag
 - **Metrics**: weighted score, investigation time, MTTD, individual scoring dimensions
-- **Artifacts**: full RCA output JSON, tool call logs, judge matrix (logged as JSON artifacts)
+- **Artifacts**: full RCA output JSON, tool call logs, eval model assessment (logged as JSON artifacts)
 
 ## Cluster GPU Topology
 
@@ -79,7 +79,7 @@ the wrong component (e.g., `productpage:high_cpu_utilization` instead of
 `reviews-v2:cpu_saturation`). When the harness accidentally leaked pre-collected
 evidence into the prompt, Granite scored 0.94 by parroting the answer. Once that
 bug was fixed, it consistently scored 0.53-0.80 depending on run variance, with
-cross-model judge averages of 2.7-7.0/10.
+eval model score averages of 2.7-7.0/10.
 
 However, when augmented with OpenShift Lightspeed RAG documentation, Granite's
 performance improved dramatically (see Lightspeed RAG experiments below).
@@ -206,7 +206,7 @@ removing the sidecar.
 | Detection | 10% | Did the agent identify an incident? |
 | Correlation | 10% | Did it gather evidence through successful tool calls? |
 | RCA Detected | 5% | Binary gate: was the root cause named anywhere? (Pass/Fail) |
-| **RCA Eval** | **50%** | **Cross-model peer evaluation of investigation quality (1-10, normalized)** |
+| **RCA Eval** | **50%** | **External eval model assessment of investigation quality (1-10, normalized)** |
 | Action Safety | 10% | Are recommended actions safe (no destructive ops)? |
 | Auditability | 15% | Can we trace the reasoning through tool call logs? |
 
@@ -218,14 +218,16 @@ fails regardless of other scores. This is a cheap, deterministic check that
 catches total failures instantly without needing any LLM inference.
 
 **RCA Eval** is the primary quality signal, carrying 50% of the total weight.
-After each model completes its investigation, every other model judges the
-output on four criteria (`rca_accuracy`, `evidence_quality`,
-`reasoning_coherence`, `remediation_quality`) plus an `overall` holistic score
-(1-10). The RCA Eval is the average of peer judges' overall scores, normalized
-to 0.0-1.0.
+The external eval model scores the output on four criteria (`rca_accuracy`,
+`evidence_quality`, `reasoning_coherence`, `remediation_quality`) plus an
+`overall` holistic score (1-10). The RCA Eval is the overall score normalized
+to 0.0-1.0. The eval model must exist outside the system being evaluated and
+only has access to the data the harness provides.
 
-Key observations about judge behavior:
-- Weaker models (Granite) tend to be more generous judges
+Note: During benchmarking, we ran cross-model validation where each model
+scored every other model's output to validate the eval system design.
+Key observations:
+- Weaker models (Granite) tend to be overly generous evaluators
 - Stronger models (Gemini, Qwen3) are harsher and more discerning
 - Cross-evaluation consensus between strong models is the reliable signal
 
@@ -278,9 +280,9 @@ After fixing the injection image and patch method:
 All three models correctly identified CPU saturation. Gemini led on weighted
 score.
 
-#### Run 4: Three-way with cross-model RCA Eval
+#### Run 4: Three-way with RCA Eval
 
-First run with the peer evaluation system:
+First run with the eval model scoring system:
 
 | Model | Score | RCA Detected | RCA Eval | Time | Tool Calls | Result |
 |-------|-------|-------------|----------|------|------------|--------|
@@ -400,9 +402,9 @@ architecture) and tuned the RAG prompt to constrain documentation searches
   keeping all data on-premises. Gemini still leads on RCA Eval (9.8/10) due to
   consistently identifying the stress-injector as the specific mechanism.
 
-### Cross-Model RCA Eval Matrix (Final Run)
+### Eval System Validation Matrix (Final Run)
 
-Each cell shows the row model's RCA scored by the column model (1-10 scale):
+Cross-model validation: each cell shows the row model's RCA scored by the column model (1-10 scale). This matrix validates the eval system design — the production system uses a single external eval model:
 
 |  | Granite | Granite+LS | Gemini | Qwen3 | Qwen3+LS | **RCA Eval** |
 |--|---------|------------|--------|-------|----------|-------------|
@@ -456,7 +458,7 @@ Prometheus metrics it never queried. Under the old scoring it passed with 0.77.
 Under the eval-weighted scoring it correctly fails with 0.59.
 
 **Resolution**: RCA Detected was flattened to a binary gate (Pass/Fail, 5%
-weight) and RCA Eval (cross-model peer evaluation, 50% weight) became the
+weight) and RCA Eval (external eval model assessment, 50% weight) became the
 primary quality signal. This ensures that naming the right answer is necessary
 but not sufficient; models must actually investigate to score well.
 
@@ -502,7 +504,7 @@ two-tier scoring system produces consistent results across runs.
   fabricates evidence it never collected. The hallucination detection correctly
   flags both Granite variants.
 
-### Cross-Model RCA Eval Matrix (Run 8)
+### Eval System Validation Matrix (Run 8)
 
 |  | Granite | Granite+LS | Gemini | Qwen3 | Qwen3+LS | **RCA Eval** |
 |--|---------|------------|--------|-------|----------|-------------|

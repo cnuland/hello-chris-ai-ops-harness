@@ -81,12 +81,27 @@ section "Bookinfo — System Under Test"
 run_cmd "oc get pods -n bookinfo"
 pause
 
-section "LLM Serving"
+section "LLM Serving & Agent Runtime"
 
 run_cmd "oc get pods -n llm-serving -o custom-columns='NAME:.metadata.name,STATUS:.status.phase,RESTARTS:.status.containerStatuses[0].restartCount,NODE:.spec.nodeName'"
 pause
 
-run_cmd "oc get routes -n llm-serving -o custom-columns='NAME:.metadata.name,HOST:.spec.host' 2>/dev/null || echo 'No routes found'"
+run_cmd "oc get pods -n llama-stack -o custom-columns='NAME:.metadata.name,STATUS:.status.phase' 2>/dev/null || echo 'Llama Stack namespace not found'"
+pause
+
+section "MLFlow — Experiment Tracking"
+
+run_cmd "oc get pods -n mlflow-aiops -o custom-columns='NAME:.metadata.name,STATUS:.status.phase' 2>/dev/null || echo 'MLFlow AIOps not deployed'"
+run_cmd "oc get pods -n mlflow-harness -o custom-columns='NAME:.metadata.name,STATUS:.status.phase' 2>/dev/null || echo 'MLFlow Harness not deployed'"
+
+# Show MLFlow routes
+MLFLOW_AIOPS_URL="$(oc get route -n mlflow-aiops -o jsonpath='{.items[0].spec.host}' 2>/dev/null || echo '')"
+MLFLOW_HARNESS_URL="$(oc get route -n mlflow-harness -o jsonpath='{.items[0].spec.host}' 2>/dev/null || echo '')"
+
+if [ -n "$MLFLOW_AIOPS_URL" ]; then
+    echo -e "    ${CYAN}AIOps MLFlow:${RESET}   https://${MLFLOW_AIOPS_URL}"
+    echo -e "    ${CYAN}Harness MLFlow:${RESET} https://${MLFLOW_HARNESS_URL}"
+fi
 pause
 
 if [ "$RESULTS_ONLY" = true ]; then
@@ -105,10 +120,15 @@ sleep 5
 pause
 
 # ─────────────────────────────────────────────────────────────────────
-# 3. Fault injection + benchmark
+# 3. Fault injection + multi-model benchmark
 # ─────────────────────────────────────────────────────────────────────
 
 section "Fault Injection & Multi-Model Benchmark"
+
+echo -e "    ${DIM}Injecting CPU saturation into reviews-v2, then running multiple"
+echo -e "    models through Llama Stack. Each model investigates independently."
+echo -e "    An external eval model scores each investigation.${RESET}"
+echo ""
 
 echo -e "${GREEN}  \$ ${BOLD}python3 scripts/local_benchmark.py${RESET}"
 echo ""
@@ -139,6 +159,25 @@ echo -e "${GREEN}  \$ ${BOLD}python3 scripts/show_results.py${RESET}"
 echo ""
 python3 scripts/show_results.py
 echo ""
+pause
+
+# ─────────────────────────────────────────────────────────────────────
+# 6. MLFlow dashboards
+# ─────────────────────────────────────────────────────────────────────
+
+section "MLFlow — Experiment Tracking"
+
+if [ -n "${MLFLOW_AIOPS_URL:-}" ]; then
+    echo -e "    ${CYAN}Opening AIOps MLFlow (pipeline behavior)...${RESET}"
+    open_browser "https://${MLFLOW_AIOPS_URL}"
+    sleep 3
+
+    echo -e "    ${CYAN}Opening Harness MLFlow (evaluation results)...${RESET}"
+    open_browser "https://${MLFLOW_HARNESS_URL}"
+    sleep 3
+else
+    echo -e "    ${YELLOW}MLFlow routes not found — skipping browser open${RESET}"
+fi
 pause
 
 section "Done"

@@ -38,13 +38,14 @@ data:
         agentTimeoutSeconds: 300
       scoring:
         weights:
-          detection: 0.15
-          correlation: 0.15
-          rca: 0.35
-          action_safety: 0.20
+          detection: 0.10
+          correlation: 0.10
+          rca_detected: 0.05
+          rca_eval: 0.50
+          action_safety: 0.10
           auditability: 0.15
         passThreshold: 0.60
-        rcaMinimum: 0.50
+        rcaGate: true  # RCA Detected must pass for overall PASS
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -83,10 +84,11 @@ data:
         agentTimeoutSeconds: 300
       scoring:
         weights:
-          detection: 0.15
-          correlation: 0.15
-          rca: 0.35
-          action_safety: 0.20
+          detection: 0.10
+          correlation: 0.10
+          rca_detected: 0.05
+          rca_eval: 0.50
+          action_safety: 0.10
           auditability: 0.15
         passThreshold: 0.60
-        rcaMinimum: 0.50
+        rcaGate: true  # RCA Detected must pass for overall PASS
