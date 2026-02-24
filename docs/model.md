@@ -12,15 +12,40 @@ loop, tool routing, and session state. The AI Harness evaluates the pipeline
 externally, using a configurable eval model to independently fact-check the
 pipeline's conclusions against real telemetry and Llama Stack session data.
 
-Experiment tracking uses two **MLFlow** instances: one for the AIOps pipeline
-(tracking tool calls, latency, MTTD) and one for the harness evaluation
-(tracking scores, judge matrices, fact-checking results). This separation
-maintains the External Independence Principle.
+**MLFlow is the primary experiment tracking backbone.** Every benchmark run
+logs its results to two physically separated MLFlow instances:
+
+| MLFlow Instance | Namespace | What it Tracks |
+|----------------|-----------|---------------|
+| **MLFlow AIOps** | `mlflow-aiops` | Pipeline behavior: model ID, tool calls, evidence retrieved, per-tool latency, investigation time, MTTD, final RCA output |
+| **MLFlow Harness** | `mlflow-harness` | Evaluation results: six scoring dimensions, weighted composite, PASS/FAIL, cross-model judge matrix, fact-checking results, hallucination flags |
+
+This dual-instance design maintains the **External Independence Principle**: the
+pipeline team sees their metrics, the evaluation team sees theirs, and neither
+can influence the other. Filesystem artifacts (`artifacts/`) serve as a backup,
+but MLFlow is the authoritative record for all experiment data.
 
 The benchmark runs below were conducted using the local benchmark script
 (`scripts/local_benchmark.py`) which drives the models directly via
 OpenAI-compatible API. Production runs use the full Llama Stack + AlertManager
 pipeline described in the whitepaper.
+
+### Viewing Results in MLFlow
+
+After any benchmark run, results are available in the MLFlow UI:
+
+```bash
+# Get MLFlow AIOps route (pipeline metrics)
+oc get route mlflow-aiops -n mlflow-aiops -o jsonpath='{.spec.host}'
+
+# Get MLFlow Harness route (evaluation metrics)
+oc get route mlflow-harness -n mlflow-harness -o jsonpath='{.spec.host}'
+```
+
+Each MLFlow run contains:
+- **Parameters**: model ID, scenario, tool count, RAG enabled flag
+- **Metrics**: weighted score, investigation time, MTTD, individual scoring dimensions
+- **Artifacts**: full RCA output JSON, tool call logs, judge matrix (logged as JSON artifacts)
 
 ## Cluster GPU Topology
 
@@ -497,6 +522,78 @@ Notable patterns:
 - The strong models (Gemini, Qwen3, Qwen3+LS) cluster at 8.4-9.8/10, while
   Granite variants are clearly separated at 2.8-4.7/10. The two-tier scoring
   correctly reflects this quality gap.
+
+## Scenario C: Distributed Cascading Failure
+
+Scenario C tests whether models can identify **multiple independent root causes**
+in a distributed incident. Unlike Scenarios A and B (single fault, single service),
+this scenario injects two faults into two different services with a 60-second
+stagger, creating genuine distributed complexity.
+
+### Fault Design
+
+| Order | Time | Target | Fault Type | Mechanism |
+|-------|------|--------|-----------|-----------|
+| #1 | T+0 | ratings-v1 | CrashLoopBackOff | Bad env var (`INVALID_DB_HOST`) + command override |
+| #2 | T+60 | reviews-v2 | CPU saturation | Stress sidecar (UBI-minimal busy-loop) |
+
+### Cascade Effects
+
+The staggered injection creates layered complexity:
+
+1. **T+0 to T+60**: ratings-v1 is crash-looping. reviews-v2/v3 show "Ratings
+   service unavailable." productpage shows degraded reviews. reviews-v1 is
+   unaffected (it doesn't call ratings).
+
+2. **T+60 onward**: reviews-v2 is now doubly impaired: its dependency (ratings)
+   is crashing AND it's CPU-starved from the stress sidecar. productpage sees
+   both errors and timeouts.
+
+3. **Red herrings**: productpage looks sick but is purely a victim. reviews-v1
+   and reviews-v3 are partially affected (ratings dependency) but not CPU-stressed.
+
+### What the Agent Must Do
+
+- **Investigate both services independently** using getMetricHistory, getK8sEvents,
+  searchLogs, and the new getNodeTopology tool
+- **Identify both root causes**: `bookinfo/ratings-v1:crashloop_bad_config` AND
+  `bookinfo/reviews-v2:cpu_saturation`
+- **Recognize the temporal ordering**: ratings crashed first, CPU saturation
+  started 60 seconds later
+- **Distinguish direct faults from cascade effects**: productpage errors are
+  symptoms, not root causes
+
+### Scoring: Multi-Cause RCA
+
+The distributed scenario extends the scoring rubric:
+
+| Causes Found | RCA Completeness | Effect on Score |
+|-------------|-----------------|----------------|
+| Both (2/2) | 1.0 | Full credit |
+| One (1/2) | 0.5 | Partial credit |
+| Neither (0/2) | 0.0 | Zero credit |
+
+**RCA Detected** (binary gate): Pass if at least ONE root cause identified.
+**RCA Eval** (50% weight): Judges specifically evaluate multi-cause detection,
+temporal analysis, and whether the agent investigated both services.
+
+### New Tool: getNodeTopology
+
+The distributed scenario adds a `getNodeTopology` tool that returns which pods
+are running on which nodes, including restart counts and container names. This
+helps the agent understand the physical distribution of the system and identify
+whether faults are co-located on the same node (resource contention) or
+distributed across nodes (independent faults).
+
+### Benchmark Script
+
+Run the distributed benchmark with:
+
+```bash
+python3 scripts/distributed_benchmark.py
+```
+
+Artifacts are written to `artifacts/distributed-benchmark-<timestamp>/`.
 
 ## Key Findings: RAG Prompt Engineering
 

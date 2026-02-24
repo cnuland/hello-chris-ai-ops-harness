@@ -22,7 +22,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
-import yaml
 from kubernetes import client, config
 
 logging.basicConfig(
@@ -61,6 +60,16 @@ FAULT_TYPE = "cpu_saturation"
 
 BASELINE_WAIT = 30      # seconds (shortened for local run)
 INJECTION_WAIT = 90     # seconds for fault to propagate
+
+# MLFlow experiment tracking (opinionated — every run logs to MLFlow)
+from mlflow_utils import (
+    get_mlflow_aiops_url, get_mlflow_harness_url,
+    log_aiops_run, log_harness_eval,
+)
+MLFLOW_AIOPS_URL = get_mlflow_aiops_url()
+MLFLOW_HARNESS_URL = get_mlflow_harness_url()
+log.info(f"MLFlow AIOps URL: {MLFLOW_AIOPS_URL}")
+log.info(f"MLFlow Harness URL: {MLFLOW_HARNESS_URL}")
 
 # ---------------------------------------------------------------------------
 # RAG Knowledge Base (simulates OpenShift Lightspeed documentation retrieval)
@@ -940,6 +949,48 @@ def _text_mentions(text, label):
 
 
 # ---------------------------------------------------------------------------
+# Shared display helpers (used by both local and distributed benchmarks)
+# ---------------------------------------------------------------------------
+
+def _hallucination_check(judge_scores: dict) -> str:
+    if not judge_scores:
+        return "N/A"
+    evidence_scores = []
+    hallucinate_mentioned = False
+    for js in judge_scores.values():
+        if isinstance(js.get("evidence_quality"), (int, float)):
+            evidence_scores.append(js["evidence_quality"])
+        just = js.get("justification", "").lower()
+        if "hallucinate" in just or "hallucinated" in just:
+            hallucinate_mentioned = True
+    avg_ev = sum(evidence_scores) / len(evidence_scores) if evidence_scores else 5
+    if hallucinate_mentioned or avg_ev < 4:
+        return "Yes"
+    elif avg_ev < 7:
+        return "Partially"
+    return "No"
+
+
+def _box_table(col_defs, rows):
+    """Render a box-drawing table. col_defs: [(header, key, width), ...]"""
+    widths = [c[2] for c in col_defs]
+    top = "┌" + "┬".join("─" * (w + 2) for w in widths) + "┐"
+    mid = "├" + "┼".join("─" * (w + 2) for w in widths) + "┤"
+    bot = "└" + "┴".join("─" * (w + 2) for w in widths) + "┘"
+    hdr = "│" + "│".join(f" {c[0]:<{c[2]}} " for c in col_defs) + "│"
+    lines = [top, hdr, mid]
+    for i, row in enumerate(rows):
+        line = "│" + "│".join(
+            f" {str(row.get(c[1], '')):<{c[2]}} " for c in col_defs
+        ) + "│"
+        lines.append(line)
+        if i < len(rows) - 1:
+            lines.append(mid)
+    lines.append(bot)
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Cross-model RCA judge
 # ---------------------------------------------------------------------------
 
@@ -996,7 +1047,7 @@ def _format_judge_input(truth: dict, subject_output: dict) -> str:
         f"  Fault type: {truth['fault']['type']}\n"
         f"  Target: {truth['fault']['target']}\n\n"
         f"AGENT OUTPUT:\n"
-        f"  Top RCA hypothesis: {subject_output.get('rca_ranked', ['(none)'])[0]}\n"
+        f"  Top RCA hypothesis: {(subject_output.get('rca_ranked') or ['(none)'])[0]}\n"
         f"  All hypotheses: {subject_output.get('rca_ranked', [])}\n"
         f"  Incident summary: {subject_output.get('incident_summary', '(none)')}\n"
         f"  Recommended action: {subject_output.get('recommended_action', '(none)')}\n"
@@ -1248,6 +1299,17 @@ async def run_benchmark():
         log.info(f"[{model_key}] RCA Detected: {rca_status}")
         log.info(f"[{model_key}] Time: {elapsed:.1f}s")
 
+        # Log to MLFlow AIOps (pipeline investigation tracking)
+        log_aiops_run(
+            model_id=model_cfg["model_id"],
+            scenario="cpu-saturation-reviews",
+            tool_calls=aiops_output.get("tool_calls", []),
+            rca_output=aiops_output,
+            investigation_time_seconds=elapsed,
+            mlflow_url=MLFLOW_AIOPS_URL,
+            tags={"model_key": model_key, "rag_enabled": str(model_cfg.get("rag_enabled", False))},
+        )
+
     # --- Phase 6: Cleanup ---
     log.info(f"\n{'='*60}")
     log.info("Phase 6: Removing fault injection")
@@ -1273,6 +1335,19 @@ async def run_benchmark():
         log.info(f"[{mk}] RCA Eval: {rca_eval:.2f} -> "
                  f"Final: {results[mk]['score']['weighted_score']} "
                  f"({results[mk]['score']['result']})")
+
+        # Log to MLFlow Harness (evaluation tracking)
+        log_harness_eval(
+            run_id=f"benchmark-{mk}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
+            model_id=MODELS[mk]["model_id"],
+            scenario="cpu-saturation-reviews",
+            scores=results[mk]["score"]["category_scores"],
+            result=results[mk]["score"]["result"],
+            weighted_score=results[mk]["score"]["weighted_score"],
+            judge_matrix=results[mk].get("judge_scores", {}),
+            mlflow_url=MLFLOW_HARNESS_URL,
+            tags={"model_key": mk, "rag_enabled": str(MODELS[mk].get("rag_enabled", False))},
+        )
 
     # --- Phase 8: Write results ---
     log.info(f"\n{'='*60}")
@@ -1325,42 +1400,6 @@ async def run_benchmark():
         "qwen3-coder-next": "Qwen3",
         "qwen3-coder-next-lightspeed": "Qwen3 + Lightspeed",
     }
-
-    def _hallucination_check(judge_scores: dict) -> str:
-        if not judge_scores:
-            return "N/A"
-        evidence_scores = []
-        hallucinate_mentioned = False
-        for js in judge_scores.values():
-            if isinstance(js.get("evidence_quality"), (int, float)):
-                evidence_scores.append(js["evidence_quality"])
-            just = js.get("justification", "").lower()
-            if "hallucinate" in just or "hallucinated" in just:
-                hallucinate_mentioned = True
-        avg_ev = sum(evidence_scores) / len(evidence_scores) if evidence_scores else 5
-        if hallucinate_mentioned or avg_ev < 4:
-            return "Yes"
-        elif avg_ev < 7:
-            return "Partially"
-        return "No"
-
-    def _box_table(col_defs, rows):
-        """Render a box-drawing table. col_defs: [(header, key, width), ...]"""
-        widths = [c[2] for c in col_defs]
-        top = "┌" + "┬".join("─" * (w + 2) for w in widths) + "┐"
-        mid = "├" + "┼".join("─" * (w + 2) for w in widths) + "┤"
-        bot = "└" + "┴".join("─" * (w + 2) for w in widths) + "┘"
-        hdr = "│" + "│".join(f" {c[0]:<{c[2]}} " for c in col_defs) + "│"
-        lines = [top, hdr, mid]
-        for i, row in enumerate(rows):
-            line = "│" + "│".join(
-                f" {str(row.get(c[1], '')):<{c[2]}} " for c in col_defs
-            ) + "│"
-            lines.append(line)
-            if i < len(rows) - 1:
-                lines.append(mid)
-        lines.append(bot)
-        return "\n".join(lines)
 
     # Build result rows
     table_rows = []

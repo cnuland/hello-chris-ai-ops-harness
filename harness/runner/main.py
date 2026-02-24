@@ -47,6 +47,25 @@ AGENT_TIMEOUT = int(os.environ.get("AGENT_TIMEOUT_SECONDS", "300"))
 BASELINE_WAIT = int(os.environ.get("BASELINE_WAIT_SECONDS", "60"))
 INJECTION_WAIT = int(os.environ.get("INJECTION_WAIT_SECONDS", "120"))
 
+# MLFlow experiment tracking (core component)
+MLFLOW_AIOPS_URL = os.environ.get(
+    "MLFLOW_AIOPS_URL",
+    "http://mlflow-aiops.mlflow-aiops.svc:5000",
+)
+MLFLOW_HARNESS_URL = os.environ.get(
+    "MLFLOW_HARNESS_URL",
+    "http://mlflow-harness.mlflow-harness.svc:5000",
+)
+
+# Import MLFlow utilities with graceful fallback
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
+    from mlflow_utils import log_aiops_run, log_harness_eval
+    _MLFLOW_AVAILABLE = True
+except ImportError:
+    _MLFLOW_AVAILABLE = False
+    log.warning("mlflow_utils not available — harness will run without MLFlow tracking")
+
 
 def generate_run_id() -> str:
     return f"run-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
@@ -474,14 +493,41 @@ async def run_harness(manifest: dict) -> dict:
     run_meta["timestamps"]["invoke_start"] = datetime.now(timezone.utc).isoformat()
 
     incident_description = _build_incident_description(scenario, fault, namespace, deployment_name)
+    invoke_start = time.time()
     aiops_output = await invoke_agent(incident_description, TOOLS_SERVER_URL, evidence)
+    invoke_elapsed = time.time() - invoke_start
     run_meta["timestamps"]["invoke_end"] = datetime.now(timezone.utc).isoformat()
+
+    # Log to MLFlow AIOps (pipeline investigation tracking)
+    if _MLFLOW_AVAILABLE:
+        log_aiops_run(
+            model_id=MODEL_ID,
+            scenario=scenario.get("id", fault_type),
+            tool_calls=aiops_output.get("tool_calls", []),
+            rca_output=aiops_output,
+            investigation_time_seconds=invoke_elapsed,
+            mlflow_url=MLFLOW_AIOPS_URL,
+            tags={"run_id": run_id, "namespace": namespace, "target": deployment_name},
+        )
 
     # Phase 6: Score
     log.info("Phase 6: Score agent output")
     run_meta["timestamps"]["score_start"] = datetime.now(timezone.utc).isoformat()
     score_result = score_run(truth, aiops_output)
     run_meta["timestamps"]["score_end"] = datetime.now(timezone.utc).isoformat()
+
+    # Log to MLFlow Harness (evaluation tracking)
+    if _MLFLOW_AVAILABLE:
+        log_harness_eval(
+            run_id=run_id,
+            model_id=MODEL_ID,
+            scenario=scenario.get("id", fault_type),
+            scores=score_result.get("category_scores", {}),
+            result=score_result.get("result", "UNKNOWN"),
+            weighted_score=score_result.get("weighted_score"),
+            mlflow_url=MLFLOW_HARNESS_URL,
+            tags={"namespace": namespace, "target": deployment_name},
+        )
 
     # Phase 7: Cleanup (remove injection)
     log.info("Phase 7: Cleanup injection")
@@ -494,7 +540,7 @@ async def run_harness(manifest: dict) -> dict:
     run_meta["status"] = "completed"
     run_meta["timestamps"]["completed"] = datetime.now(timezone.utc).isoformat()
 
-    # Write artifacts
+    # Write artifacts (filesystem backup — MLFlow is the primary record)
     log.info("Writing artifacts...")
     paths = write_all_artifacts(run_id, run_meta, truth, aiops_output, score_result)
     for name, path in paths.items():

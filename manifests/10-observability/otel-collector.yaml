@@ -37,7 +37,7 @@ data:
       # Prometheus exporter for metric forwarding
       prometheus:
         endpoint: 0.0.0.0:8889
-        namespace: aiops
+        namespace: aiops-harness
 
     service:
       pipelines:

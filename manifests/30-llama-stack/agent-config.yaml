@@ -40,10 +40,10 @@ data:
     #   3. Evaluating whether evidence supports the pipeline's conclusions
     #
     # Any OpenAI-compatible endpoint works. Examples:
-    #   - Another vLLM instance: http://qwen3-server.llm-serving.svc:8080
+    #   - Another vLLM instance: http://qwen3-coder-next.llm-serving.svc:8080
     #   - SaaS baseline: https://generativelanguage.googleapis.com/v1beta/openai
     #   - Same model (self-eval, not recommended): same as llama_stack_url
-    eval_model_url: "http://qwen3-server.llm-serving.svc.cluster.local:8080"
+    eval_model_url: "http://qwen3-coder-next.llm-serving.svc.cluster.local:8080"
     eval_model_id: "qwen3-coder-next"
 
     # --- Agent behavior ---

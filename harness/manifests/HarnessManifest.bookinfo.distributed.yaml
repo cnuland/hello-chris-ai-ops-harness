@@ -1,0 +1,97 @@
+# Scenario C: Distributed cascading failure across ratings-v1 and reviews-v2
+# Two independent faults injected with a 60-second stagger to create genuine
+# distributed complexity requiring timestamp correlation and multi-cause RCA.
+apiVersion: aiops.redhat.com/v1alpha1
+kind: HarnessManifest
+metadata:
+  name: ocp-bookinfo-distributed-cascade
+  labels:
+    scenario: distributed-cascading-failure
+    workload: bookinfo
+spec:
+  sut:
+    type: ocp
+    clusterVersion: "4.21.x"
+    workload:
+      name: bookinfo
+      namespace: bookinfo
+
+  scenario:
+    id: distributed-cascading-multi-service
+    description: >
+      Inject two independent faults with a 60-second stagger to simulate a
+      cascading multi-service failure. At T+0, inject a bad environment variable
+      into ratings-v1 causing CrashLoopBackOff. At T+60, inject a CPU stress
+      sidecar into reviews-v2 causing CPU saturation. This creates cross-service
+      cascade effects: ratings crash degrades reviews and productpage, then CPU
+      saturation compounds the reviews-v2 degradation. The agent must identify
+      BOTH independent root causes and their temporal ordering.
+    hypothesis: >
+      The AIOps agent should identify both ratings-v1 CrashLoopBackOff AND
+      reviews-v2 CPU saturation as independent root causes. It should recognize
+      the 60-second stagger between fault onset times and not conflate them into
+      a single cause. It should distinguish between direct faults (ratings crash,
+      CPU stress) and cascade effects (productpage degradation, reviews error
+      rate increase from ratings dependency).
+
+    fault:
+      type: distributed_cascading_failure
+      targets:
+        - targetSelector:
+            kind: Deployment
+            name: ratings-v1
+          faultType: crashloop_bad_config
+          order: 1
+          offsetSeconds: 0
+          parameters:
+            envVar: INVALID_DB_HOST
+            envValue: "this-host-does-not-exist.invalid"
+        - targetSelector:
+            kind: Deployment
+            name: reviews-v2
+          faultType: cpu_saturation
+          order: 2
+          offsetSeconds: 60
+          parameters:
+            cpuPercent: 95
+
+  timing:
+    baselineSeconds: 30
+    staggerSeconds: 60
+    injectionWaitSeconds: 180
+    agentTimeoutSeconds: 600
+
+  evidence:
+    metrics:
+      # Ratings-v1 fault signals
+      - name: ratings_restarts
+        query: 'kube_pod_container_status_restarts_total{namespace="bookinfo", pod=~"ratings-v1.*"}'
+      - name: ratings_waiting
+        query: 'kube_pod_container_status_waiting_reason{namespace="bookinfo", pod=~"ratings-v1.*"}'
+      - name: ratings_status
+        query: 'kube_pod_status_phase{namespace="bookinfo", pod=~"ratings-v1.*"}'
+      # Reviews-v2 fault signals
+      - name: reviews_cpu
+        query: 'rate(container_cpu_usage_seconds_total{namespace="bookinfo", pod=~"reviews-v2.*"}[5m])'
+      - name: reviews_memory
+        query: 'container_memory_working_set_bytes{namespace="bookinfo", pod=~"reviews-v2.*"}'
+      # Cross-service impact
+      - name: all_restarts
+        query: 'kube_pod_container_status_restarts_total{namespace="bookinfo"}'
+      - name: all_pod_status
+        query: 'kube_pod_status_phase{namespace="bookinfo"}'
+    events:
+      namespace: bookinfo
+      sinceMinutes: 30
+
+  scoring:
+    weights:
+      detection: 0.10
+      correlation: 0.10
+      rca_detected: 0.05
+      action_safety: 0.10
+      auditability: 0.15
+      rca_eval: 0.50
+    passThreshold: 0.60
+    rcaDetectedMode: multi_cause
+    rcaDetectedMinimum: 1

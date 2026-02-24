@@ -790,5 +790,29 @@
     "content": "Bookinfo is a polyglot microservices application with four services:\n\n1) productpage (Python) \u2014 the frontend, calls details and reviews\n2) details (Ruby) \u2014 provides book details, independent service\n3) reviews (Java) \u2014 provides book reviews, has three versions:\n   - v1: no ratings\n   - v2: black star ratings, calls ratings service\n   - v3: red star ratings, calls ratings service\n4) ratings (Node.js) \u2014 provides star ratings\n\nDependency chain: productpage -> reviews -> ratings\n\nIf the reviews service degrades, productpage will experience increased latency or errors since it synchronously calls reviews. If ratings degrades, only reviews v2 and v3 are affected.",
     "ocp_version": "4.21",
     "lightspeed_source": "byok/bookinfo-architecture.md"
+  },
+  {
+    "id": "byok-distributed-failures",
+    "source": "BYOK / SRE Runbook",
+    "title": "Investigating Distributed Failures in Microservices",
+    "content": "Distributed failures involve multiple independent root causes affecting different services simultaneously. Key investigation steps:\n\n1) Check ALL services for anomalies, not just the one reporting errors. Use 'kube_pod_status_phase{namespace=\"bookinfo\"}' to get a namespace-wide view.\n2) Correlate timestamps across services. Multiple faults may have different onset times. Use 'kube_pod_container_status_restarts_total' across the entire namespace.\n3) Distinguish between direct faults and cascade effects. If Service A depends on Service B, and B is crashing, A will also show errors — but A is a victim, not a root cause.\n4) Check node topology. Use 'oc get pods -o wide' to see which nodes each pod runs on. Node-level issues (disk pressure, memory pressure) affect all pods on that node.\n5) Look for independent fault signatures: CrashLoopBackOff (config/code errors), CPU throttling (resource exhaustion), OOMKilled (memory limits), ImagePullBackOff (registry issues).\n\nCommon distributed failure patterns:\n- Cascading dependency failure: A downstream service crashes, causing upstream services to timeout or error\n- Resource contention: Multiple services compete for CPU/memory on the same node\n- Staggered failures: Independent faults occur at different times, compounding effects\n- Split-brain: Network partitions cause services on different nodes to behave inconsistently",
+    "ocp_version": "4.21",
+    "lightspeed_source": "byok/runbook-distributed-failures.md"
+  },
+  {
+    "id": "byok-timestamp-correlation",
+    "source": "BYOK / SRE Runbook",
+    "title": "Timestamp Correlation for Multi-Cause Root Cause Analysis",
+    "content": "When investigating incidents with multiple symptoms, correlating timestamps is critical for distinguishing root causes from cascade effects.\n\nTechnique: Timeline reconstruction\n1) Query 'changes(kube_pod_container_status_restarts_total{namespace=\"bookinfo\"}[30m])' to see which pods restarted and when.\n2) Query 'rate(container_cpu_usage_seconds_total{namespace=\"bookinfo\"}[1m])' over a time range to see CPU spikes.\n3) Use Kubernetes events with timestamps: 'oc get events -n bookinfo --sort-by=.lastTimestamp'\n4) Build a timeline: the FIRST anomaly in time is likely the primary root cause. Later anomalies may be cascade effects.\n\nExample: If ratings-v1 starts CrashLoopBackOff at 10:00 and reviews-v2 shows CPU saturation at 10:01, these could be:\n- Scenario A: Independent faults (two root causes) — verify by checking if the CPU saturation mechanism is separate (e.g., a stress sidecar)\n- Scenario B: Cascade effect — reviews-v2 is CPU-stressed because it's retrying failed calls to ratings\n\nTo distinguish: check if reviews-v2 has an unusual container (sidecar injection), unusual env vars, or resource changes. If the CPU source is internal to the reviews-v2 pod (not from retries), it's an independent fault.",
+    "ocp_version": "4.21",
+    "lightspeed_source": "byok/runbook-timestamp-correlation.md"
+  },
+  {
+    "id": "byok-bookinfo-failure-propagation",
+    "source": "BYOK / Application Architecture",
+    "title": "Bookinfo Failure Propagation and Cascade Effects",
+    "content": "Understanding how failures propagate through Bookinfo is essential for distributed RCA.\n\nFailure propagation paths:\n\n1) ratings-v1 crash → reviews-v2/v3 show 'Ratings service is currently unavailable' → productpage shows degraded reviews → users see partial page\n   - reviews-v1 is NOT affected (it does not call ratings)\n   - details service is NOT affected (independent of reviews/ratings)\n   - Prometheus signal: kube_pod_container_status_restarts_total increases for ratings pods\n\n2) reviews-v2 CPU saturation → productpage experiences increased latency → users see slow page loads or timeouts\n   - Other review versions (v1, v3) may still respond normally if traffic is load-balanced\n   - ratings-v1 is NOT directly affected (reviews calls ratings, not vice versa)\n   - Prometheus signal: container_cpu_usage_seconds_total shows high rate for reviews-v2 containers\n\n3) Combined: ratings crash + reviews-v2 CPU saturation → reviews-v2 is doubly impaired (dependency crashing AND CPU-starved) → productpage sees both errors and timeouts → severe user impact\n   - This creates a red herring: productpage looks like the root cause but is a victim\n   - The agent must investigate each service independently to find the two independent faults\n\nKey PromQL queries for distributed investigation:\n- Namespace-wide CPU: rate(container_cpu_usage_seconds_total{namespace=\"bookinfo\",container!=\"\"}[5m])\n- Namespace-wide restarts: kube_pod_container_status_restarts_total{namespace=\"bookinfo\"}\n- Namespace-wide pod status: kube_pod_status_phase{namespace=\"bookinfo\"}\n- Waiting reasons: kube_pod_container_status_waiting_reason{namespace=\"bookinfo\"}",
+    "ocp_version": "4.21",
+    "lightspeed_source": "byok/bookinfo-failure-propagation.md"
   }
 ]

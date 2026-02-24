@@ -1,0 +1,34 @@
+{
+  "root_cause": {
+    "label": "bookinfo/ratings-v1:crashloop_bad_config",
+    "confidence": 1.0
+  },
+  "root_causes": [
+    {
+      "label": "bookinfo/ratings-v1:crashloop_bad_config",
+      "order": 1,
+      "inject_offset_seconds": 0,
+      "confidence": 1.0
+    },
+    {
+      "label": "bookinfo/reviews-v2:cpu_saturation",
+      "order": 2,
+      "inject_offset_seconds": 60,
+      "confidence": 1.0
+    }
+  ],
+  "fault": {
+    "type": "distributed_cascading_failure",
+    "targets": ["bookinfo/ratings-v1", "bookinfo/reviews-v2"],
+    "stagger_seconds": 60,
+    "parameters": {
+      "ratings_v1": {
+        "envVar": "INVALID_DB_HOST",
+        "envValue": "this-host-does-not-exist.invalid"
+      },
+      "reviews_v2": {
+        "cpuPercent": 95
+      }
+    }
+  }
+}

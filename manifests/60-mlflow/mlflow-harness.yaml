@@ -44,7 +44,11 @@ spec:
             - "--host=0.0.0.0"
             - "--port=5000"
             - "--backend-store-uri=sqlite:///mlflow/mlflow.db"
-            - "--default-artifact-root=/mlflow/artifacts"
+            - "--default-artifact-root=mlflow-artifacts:/"
+            - "--serve-artifacts"
+            - "--artifacts-destination=/mlflow/artifacts"
+            - "--workers=1"
+            - "--allowed-hosts=*"
           ports:
             - containerPort: 5000
               name: http
@@ -54,7 +58,7 @@ spec:
               memory: 256Mi
             limits:
               cpu: 500m
-              memory: 512Mi
+              memory: 2Gi
           readinessProbe:
             httpGet:
               path: /health
@@ -103,3 +107,20 @@ spec:
   resources:
     requests:
       storage: 5Gi
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mlflow-harness
+  namespace: mlflow-harness
+  labels:
+    app: mlflow-harness
+spec:
+  to:
+    kind: Service
+    name: mlflow-harness
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
