@@ -35,7 +35,7 @@ We demonstrate the architecture using Red Hat OpenShift 4.21+, OpenShift AI, Lla
 
 ## What you'll get by the end
 
-After reading this paper, you'll understand what an AIOps harness is and why it needs to be external to the AI system it evaluates. You'll know the four artifacts that every harness run produces (`run.json`, `truth.json`, `aiops_output.json`, `score.json`), how the six-dimension scoring rubric works (including cross-model peer evaluation as the primary quality signal), and how the whole thing deploys on OpenShift. You'll also see how this pattern fits into compliance frameworks and how it creates a feedback loop for continuous model improvement.
+After reading this paper, you'll understand what an AIOps harness is and why it needs to be external to the AI system it evaluates. You'll know the four artifacts that every harness run produces (`run.json`, `truth.json`, `aiops_output.json`, `score.json`), how the six-dimension scoring rubric works (including external eval model assessment as the primary quality signal), and how the whole thing deploys on OpenShift. You'll also see how this pattern fits into compliance frameworks and how it creates a feedback loop for continuous model improvement.
 
 ---
 
@@ -108,7 +108,7 @@ The harness operates through a five-phase lifecycle. Here's what each phase does
 
 3. **Invoke:** trigger the AIOps reasoning system and let it conduct a tool-mediated investigation. In harness-triggered mode, the harness presents a textual incident description. In alert-triggered mode, Prometheus AlertManager detects the fault and sends an alert webhook that automatically creates an agent session (see Section 6.6). Either way, the agent receives an incident trigger and access to investigative tools but doesn't have direct access to `truth.json` or the harness orchestrator. The agent has to arrive at its conclusions independently. *What you see:* the agent making tool calls, querying Prometheus, pulling Kubernetes events, searching logs, and building its diagnosis in real time.
 
-4. **Score:** evaluate the AIOps system's output against the known ground truth using a two-tier scoring system. *What you get back:* a `score.json` with independent scores for detection, correlation, RCA detection (binary gate), RCA evaluation (peer-assessed quality), action safety, and auditability, plus a weighted composite and a PASS/FAIL determination.
+4. **Score:** evaluate the AIOps system's output against the known ground truth using a two-tier scoring system. *What you get back:* a `score.json` with independent scores for detection, correlation, RCA detection (binary gate), RCA evaluation (external eval model assessment), action safety, and auditability, plus a weighted composite and a PASS/FAIL determination.
 
 5. **Produce:** emit immutable governance artifacts (the run bundle) that constitute a complete, replayable record of the evaluation. *What you get back:* four JSON files that any stakeholder can use to reconstruct exactly what happened.
 
@@ -141,7 +141,7 @@ The contract defines interfaces between five component roles:
 - **Harness Orchestrator:** controls the run lifecycle: injection timing, evidence capture windows, agent invocation, artifact collection. Enforces timeboxing and isolation.
 - **AIOps Reasoning System:** the agent under evaluation. Receives an incident description and tool endpoints; must produce structured JSON output with ranked root cause hypotheses, evidence pointers, recommended actions, and confidence scores.
 - **Telemetry Providers:** evidence plane components (Prometheus, OpenTelemetry Collector, Kubernetes API) that expose investigative tools. Tool schemas define input parameters, output formats, and error handling.
-- **Judge/Scoring Engine:** actively fact-checks the AIOps pipeline's conclusions rather than passively scoring outputs. Uses a two-tier system: a deterministic binary gate (RCA Detected) and cross-model peer evaluation (RCA Eval). The eval model has access to the same telemetry sources the pipeline used (Prometheus, K8s events, logs) plus the pipeline's own telemetry (tool call logs, agent session traces). It independently verifies: "The pipeline says X caused Y — does the telemetry actually support that?" This evidence-based fact-checking is what makes peer evaluation meaningful.
+- **Eval Model / Scoring Engine:** actively fact-checks the AIOps pipeline's conclusions rather than passively scoring outputs. Uses a two-tier system: a deterministic binary gate (RCA Detected) and an external eval model assessment (RCA Eval). The eval model must exist outside the system being evaluated and only has access to the data the harness provides: the pipeline's `aiops_output.json` (including tool calls, evidence pointers, and conclusions) and the ground truth. It independently verifies: "The pipeline says X caused Y — does the evidence in the harness artifacts actually support that?" This evidence-based fact-checking is what makes the evaluation meaningful.
 - **Governance Policies:** external documents that constrain what the agent can recommend or execute (e.g., "scaling is permitted; namespace deletion is not").
 
 ## 3.2 Required Outputs (Run Bundle)
@@ -151,7 +151,7 @@ Every harness execution emits a **run bundle** comprising four required artifact
 - **`run.json`**: "what we ran." Run ID, timestamps for each lifecycle phase, system under test (cluster version, namespace, workload), scenario executed, terminal status.
 - **`truth.json`**: "what actually happened." The known root cause label, fault type, target resource, and confidence value (always 1.0 for deterministic injection). Never exposed to the agent.
 - **`aiops_output.json`**: "what the agent concluded and how it got there." Incident summary, ranked root cause hypotheses, recommended actions, and the complete tool-call log with request parameters and response summaries. This is your audit trail.
-- **`score.json`**: "how it did." Independent scores for detection, correlation, RCA detection (binary gate), RCA evaluation (cross-model peer assessment), action safety, and auditability, plus a weighted composite score and PASS/FAIL determination.
+- **`score.json`**: "how it did." Independent scores for detection, correlation, RCA detection (binary gate), RCA evaluation (external eval model assessment), action safety, and auditability, plus a weighted composite score and PASS/FAIL determination.
 
 An **evidence pointer** is a structured reference in `aiops_output.json` that links an agent conclusion to a specific piece of telemetry evidence. For example: `{"type": "prometheus", "query": "container_cpu_usage_seconds_total{pod='reviews-v2'}", "time_range": "2026-02-07T21:14:00Z/2026-02-07T21:24:00Z"}`. Evidence pointers let auditors verify that the agent's reasoning was grounded in real data rather than hallucinated.
 
@@ -193,14 +193,39 @@ The second scenario injects a bad environment variable (`INVALID_DB_HOST`) into 
 
 Using two scenarios with different evidence patterns validates that the agent isn't pattern-matching against a single fault type. The harness contract and scoring rubric are identical for both. Only the manifest and ground truth differ.
 
-## 4.4 Six Scoring Dimensions
+## 4.4 Scenario C: Distributed Cascading Failure
+
+Scenarios A and B each inject a single fault into a single service. Real-world incidents are rarely that clean. Scenario C tests whether the agent can identify **multiple independent root causes** in a distributed incident with temporal complexity.
+
+The harness injects two faults into two different services with a 60-second stagger:
+
+| Order | Time | Target | Fault Type | Mechanism |
+|-------|------|--------|-----------|-----------|
+| #1 | T+0 | ratings-v1 | CrashLoopBackOff | Bad environment variable (`INVALID_DB_HOST`) + command override |
+| #2 | T+60 | reviews-v2 | CPU saturation | Stress sidecar container (UBI-minimal busy-loop) |
+
+The staggered injection creates layered complexity that tests the agent's ability to reason about time and causality:
+
+- **T+0 to T+60:** ratings-v1 is crash-looping. reviews-v2 and reviews-v3 show "Ratings service unavailable." productpage shows degraded reviews. reviews-v1 is unaffected (it doesn't call ratings).
+- **T+60 onward:** reviews-v2 is now doubly impaired: its dependency (ratings) is crashing AND it's CPU-starved from the stress sidecar. productpage sees both errors and timeouts.
+- **Red herrings:** productpage looks sick but is purely a victim. reviews-v1 and reviews-v3 are partially affected (ratings dependency) but not CPU-stressed.
+
+The agent must investigate both services independently, identify both root causes (`bookinfo/ratings-v1:crashloop_bad_config` AND `bookinfo/reviews-v2:cpu_saturation`), recognize the temporal ordering (ratings crashed first, CPU saturation started 60 seconds later), and distinguish direct faults from cascade effects (productpage errors are symptoms, not causes).
+
+**Multi-cause scoring** extends the rubric: finding both causes earns full RCA credit (completeness = 1.0), finding one earns partial credit (0.5), and finding neither earns zero. RCA Detected passes if at least one root cause is identified. The eval model, which exists outside the system being evaluated and only has access to the data the harness provides, specifically evaluates multi-cause detection, temporal analysis, and whether the agent investigated both services.
+
+A `getNodeTopology` tool is added for this scenario, returning which pods are running on which nodes with restart counts. This helps the agent determine whether faults are co-located (resource contention) or distributed across nodes (independent faults).
+
+Scenario C validates that the architecture scales beyond single-fault scenarios into the kind of multi-service, temporally complex incidents that SREs face in production.
+
+## 4.5 Six Scoring Dimensions
 
 Both scenarios are evaluated across the same six dimensions, organized into a two-tier system that separates detection from quality:
 
 - **Detection:** Did the agent catch the anomaly from the earliest signals?
 - **Correlation:** Did it group related signals into a single incident?
 - **RCA Detected:** Binary gate: did the agent name the correct root cause anywhere in its top-3 hypotheses or response text? This is a deterministic, instant check that catches total failures without requiring LLM inference.
-- **RCA Eval:** Cross-model peer evaluation of investigation quality. Every model judges every other model's output on four criteria (rca_accuracy, evidence_quality, reasoning_coherence, remediation_quality) plus an overall score (1-10). This is the primary quality signal, carrying 50% of the total weight.
+- **RCA Eval:** External eval model assessment of investigation quality. The eval model, which must exist outside the system being evaluated, scores the output on four criteria (rca_accuracy, evidence_quality, reasoning_coherence, remediation_quality) plus an overall score (1-10). This is the primary quality signal, carrying 50% of the total weight.
 - **Action safety:** Did it recommend something proportionate (e.g., scale the deployment, restart the pod) rather than dangerous (e.g., delete the namespace)?
 - **Auditability:** Can the reasoning be reconstructed from tool-call logs and evidence pointers?
 
@@ -310,7 +335,7 @@ spec:
 }
 ```
 
-Note: `rca_detected` is a binary value (1.0 = root cause named, 0.0 = missed). `rca_eval` is the normalized average of cross-model peer evaluation scores (0.0-1.0, derived from 1-10 judge ratings). The `rca_gate` field indicates whether the binary detection gate passed; if it fails, the overall result is FAIL regardless of the weighted score.
+Note: `rca_detected` is a binary value (1.0 = root cause named, 0.0 = missed). `rca_eval` is the normalized eval model assessment score (0.0-1.0, derived from 1-10 ratings across four criteria). The `rca_gate` field indicates whether the binary detection gate passed; if it fails, the overall result is FAIL regardless of the weighted score.
 
 ## 5.6 Minimal Python Harness Runner
 
@@ -397,7 +422,7 @@ This separation means the harness runner no longer drives the multi-turn tool-ca
 1. Creates a Llama Stack agent with the appropriate tools and system prompt
 2. Opens a session and posts the incident trigger (or alert payload)
 3. Receives the completed investigation as structured output
-4. **Uses the eval model to fact-check the investigation** — querying the same telemetry sources independently and inspecting Llama Stack's tool call logs to verify that evidence claims are grounded in real data
+4. **Uses the eval model to fact-check the investigation** — the eval model exists outside the system being evaluated and only has access to the data the harness provides (the pipeline's output, tool call logs, and ground truth) to verify that evidence claims are grounded in real data
 
 The AIOps pipeline is a self-contained black box from the harness's perspective. The harness can inspect its internals (tool call logs, session telemetry) for verification, but cannot influence the investigation while it runs.
 
@@ -561,9 +586,9 @@ Two physically separated MLFlow instances maintain the External Independence Pri
 
 **AIOps Pipeline Tracker** (`mlflow-aiops` namespace). Each Llama Stack agent session maps to one MLFlow run. The tracker logs: model ID, scenario, every tool call made (with parameters and results), per-tool type counts, total investigation time, MTTD (when alert-triggered), hypothesis count, and the full RCA output as an artifact. This enables the AIOps team to compare prompt strategies, RAG configurations, and model versions across runs — understanding *how* the pipeline investigates and where it spends its time. For distributed scenarios, the tracker additionally logs cause counts, RCA completeness, and stagger timing.
 
-**Harness Evaluation Tracker** (`mlflow-harness` namespace). Each harness evaluation maps to one MLFlow run. The tracker logs: all six scoring dimensions as individual metrics, weighted composite score, PASS/FAIL determination (as both a string parameter and numeric metric for charting), per-judge overall scores, average judge score, and the full cross-model judge matrix as an artifact. This enables regression tracking across model updates, prompt changes, and harness configuration changes — understanding *how well* the pipeline investigated and whether its claims hold up under independent verification.
+**Harness Evaluation Tracker** (`mlflow-harness` namespace). Each harness evaluation maps to one MLFlow run. The tracker logs: all six scoring dimensions as individual metrics, weighted composite score, PASS/FAIL determination (as both a string parameter and numeric metric for charting), eval model scores across all four criteria, and the full evaluation report as an artifact. This enables regression tracking across model updates, prompt changes, and harness configuration changes — understanding *how well* the pipeline investigated and whether its claims hold up under independent verification.
 
-Why two instances rather than one? The AIOps MLFlow tracks the pipeline's behavior. The Harness MLFlow judges the pipeline's correctness. If they shared an instance, evaluation metadata could leak into the pipeline's view, and a single experiment namespace would blur the line between "what the agent did" and "how well it did it." Separate tracking keeps the audit boundary clean: the pipeline team sees their own metrics, the evaluation team sees theirs, and neither can influence the other.
+Why two instances rather than one? The AIOps MLFlow tracks the pipeline's behavior. The Harness MLFlow tracks the eval model's assessment of the pipeline's correctness. If they shared an instance, evaluation metadata could leak into the pipeline's view, and a single experiment namespace would blur the line between "what the agent did" and "how well it did it." Separate tracking keeps the audit boundary clean: the pipeline team sees their own metrics, the evaluation team sees theirs, and neither can influence the other.
 
 Both MLFlow instances are deployed on OpenShift with persistent storage and TLS-terminated Routes for external UI access. The benchmark scripts auto-discover MLFlow URLs via `oc get route`, falling back to in-cluster service DNS for production deployments. If MLFlow is temporarily unreachable, runs continue with a warning — the benchmark never fails because of tracking infrastructure, but the results are not recorded until MLFlow is restored.
 
@@ -596,7 +621,7 @@ On Red Hat OpenShift 4.21+, the three planes map to Kubernetes namespaces with R
 - **`llama-stack`:** Llama Stack agent runtime. Wraps vLLM, exposes the Agent API, routes tool calls to the tools server. This is the AIOps pipeline being evaluated.
 - **`aiops-harness`:** tools server (FastAPI service exposing `getMetricHistory`, `getK8sEvents`, `searchLogs`, `getTraceWaterfall`), harness orchestrator (Kubernetes Job), and alert webhook receiver
 - **`mlflow-aiops`:** MLFlow instance tracking AIOps pipeline runs (agent investigations, tool calls, MTTD)
-- **`mlflow-harness`:** MLFlow instance tracking harness evaluation results (scores, judge matrices, fact-checking outcomes)
+- **`mlflow-harness`:** MLFlow instance tracking harness evaluation results (scores, eval model assessments, fact-checking outcomes)
 
 The reference cluster uses 2x NVIDIA H200 (Hopper, 141GB each) with Node 1 in MIG mode (providing isolated GPU slices for smaller models) and Node 2 in whole-GPU mode (for large tensor-parallel deployments). When tensor-parallel-size > 1, CUDA compatibility must be native in the container image; environment variable workarounds only affect the parent process and fail for worker subprocesses.
 
@@ -632,47 +657,51 @@ The harness contract abstracts the specific chaos engineering implementation. An
 
 A single accuracy score isn't sufficient for AIOps evaluation. Operational decisions involve multiple independent quality dimensions. More importantly, we discovered through empirical benchmarking that a deterministic keyword-matching score alone produces dangerous false confidence: a model can name the correct root cause while hallucinating all supporting evidence, and still receive a perfect score.
 
-The harness contract addresses this with a two-tier system. **Tier 1** is a binary detection gate (did the model name the root cause?). **Tier 2** is a cross-model peer evaluation of investigation quality, carrying the majority of the weight. Six dimensions are evaluated independently:
+The harness contract addresses this with a two-tier system. **Tier 1** is a binary detection gate (did the model name the root cause?). **Tier 2** is an external eval model assessment of investigation quality, carrying the majority of the weight. Six dimensions are evaluated independently:
 
 | Dimension | Weight | What it measures | How it's scored |
 |-----------|--------|-----------------|----------------|
 | **Detection** | 10% | Did the agent identify that an incident was occurring? | Binary: detected or not. Bonus for early detection within the fault propagation window. |
 | **Correlation** | 10% | Did the agent group related signals into a single incident? | Fraction of related signals correctly grouped vs. treated as independent problems. |
 | **RCA Detected** | 5% | Did the agent name the correct root cause? | Binary gate: 1.0 if root cause appears in top-3 hypotheses or response text; 0.0 otherwise. Automatic FAIL if 0.0, regardless of other scores. |
-| **RCA Eval** | **50%** | **How well did the agent investigate?** | **Cross-model peer evaluation. Each model judges every other model's output (1-10 scale). Average is normalized to 0-1. Primary quality signal.** |
+| **RCA Eval** | **50%** | **How well did the agent investigate?** | **External eval model assessment. The eval model scores the output on four criteria (1-10 scale). Average is normalized to 0-1. Primary quality signal.** |
 | **Action Safety** | 10% | Is the recommended remediation safe and proportionate? | Scored against an allowed action set (scale, restart = safe; delete namespace = unsafe). |
 | **Auditability** | 15% | Can the reasoning be reconstructed from tool-call logs and evidence pointers? | Evaluated by checking that evidence citations are valid and reasoning chain is complete. |
 
 The composite score is the weighted sum. PASS requires composite >= 0.60 *and* RCA Detected = Pass.
 
-The key insight behind this design: naming the right root cause is *necessary but not sufficient*. A model that makes one tool call and guesses correctly is fundamentally different from a model that queries metrics, examines events, searches logs, and builds an evidence-based diagnosis. The peer evaluation (RCA Eval) captures this difference. In our benchmarking, a 1B model received RCA Detected: Pass but RCA Eval: 5.0/10, correctly failing with a weighted score of 0.59. Under the old single-tier scoring, that same model passed with 0.77.
+The key insight behind this design: naming the right root cause is *necessary but not sufficient*. A model that makes one tool call and guesses correctly is fundamentally different from a model that queries metrics, examines events, searches logs, and builds an evidence-based diagnosis. The eval model assessment (RCA Eval) captures this difference. In our benchmarking, a 1B model received RCA Detected: Pass but RCA Eval: 5.0/10, correctly failing with a weighted score of 0.59. Under the old single-tier scoring, that same model passed with 0.77.
 
-## 13.2 Cross-Model Peer Evaluation (RCA Eval)
+## 13.2 External Eval Model Assessment (RCA Eval)
 
-The scoring engine combines a deterministic binary gate (RCA Detected) with cross-model peer evaluation (RCA Eval). After all models complete their investigations, every model judges every other model's output. Each judge evaluates four criteria on a 1-10 scale:
+The scoring engine combines a deterministic binary gate (RCA Detected) with an external eval model assessment (RCA Eval). The eval model must exist outside the system being evaluated and can only access the data the harness provides — it cannot query the same telemetry sources or access the cluster directly. This constraint is fundamental: if the eval model can see raw telemetry, it could arrive at the right answer independently and then rubber-stamp the pipeline's output without actually verifying the pipeline's reasoning.
+
+The eval model scores the pipeline's output on four criteria, each on a 1-10 scale:
 
 - **rca_accuracy:** Did the agent correctly identify the root cause component and fault type?
 - **evidence_quality:** Was the diagnosis supported by actual tool results, or did the agent hallucinate evidence?
 - **reasoning_coherence:** Does the causal chain logically connect the evidence to the conclusion?
 - **remediation_quality:** Is the recommended action specific, safe, and targeted at the actual root cause?
 
-Each judge also provides an **overall** score (1-10) with a one-sentence justification. The RCA Eval for a model is the average of all peer judges' overall scores, normalized to 0.0-1.0.
+The eval model also provides an **overall** score (1-10) with a one-sentence justification. The RCA Eval is the overall score normalized to 0.0-1.0.
 
-Zheng et al. [7] demonstrated that strong LLM judges can match human evaluator agreement at over 80%, while identifying biases to account for: position bias, verbosity bias, self-enhancement bias, and limited mathematical reasoning. Our empirical benchmarking revealed additional patterns specific to cross-model operational evaluation:
+Zheng et al. [7] demonstrated that strong LLM judges can match human evaluator agreement at over 80%, while identifying biases to account for: position bias, verbosity bias, self-enhancement bias, and limited mathematical reasoning. Choosing a strong eval model is important — a weak eval model may lack the domain knowledge to identify fabricated evidence, while a strong eval model will catch hallucinated Prometheus queries, incorrect remediation direction ("scale down" for CPU saturation), and unsupported claims in incident summaries.
 
-- **Weaker models are generous judges.** A 1B model rated a peer's output 8-10/10 in cases where stronger models gave 3-5/10, because it lacked the domain knowledge to identify fabricated evidence.
-- **Stronger models are harsh and discerning.** They caught hallucinated Prometheus queries, incorrect remediation direction ("scale down" for CPU saturation), and unsupported claims in incident summaries.
-- **Cross-model consensus between strong judges is the reliable signal.** When two independently deployed models (e.g., an 80B MoE and a SaaS baseline) agree on a score, that score is trustworthy.
-
-Critically, the peer evaluation is not just opinion scoring — it is evidence-based fact-checking. Each judge model has access to:
+The eval model has access to:
 
 - The evaluated model's complete `aiops_output.json`, including tool calls, evidence pointers, and conclusions
-- The same telemetry sources (Prometheus, K8s events, logs) to independently verify evidence claims
-- The AIOps pipeline's session telemetry (via Llama Stack or equivalent), showing what the evaluated model actually queried versus what it claimed to have found
+- The ground truth from `truth.json`
+- The harness-provided context (scenario description, scoring rubric)
 
-This is what makes `evidence_quality` scores reliable: judges can check whether cited Prometheus queries were actually made and whether the returned data supports the stated conclusions. A model that claims "CPU utilization at 95% based on `container_cpu_usage_seconds_total`" but never actually queried that metric will be caught.
+It does NOT have access to:
 
-The peer evaluation also enables **automated hallucination detection**. When judges' average `evidence_quality` score falls below 4/10, or when any judge's justification mentions hallucinated evidence, the system flags the output. This provides an automated quality signal without requiring a separate hallucination classifier.
+- Raw telemetry sources (Prometheus, K8s events, logs)
+- The AIOps pipeline's internal session state
+- The cluster or any live systems
+
+This constraint means the eval model must assess investigation quality based solely on what the harness provides. It checks whether the tool call log is internally consistent, whether evidence pointers reference plausible queries, and whether the reasoning chain connects evidence to conclusions. A model that claims "CPU utilization at 95% based on `container_cpu_usage_seconds_total`" but has no corresponding tool call in its log will be caught.
+
+The eval model also enables **automated hallucination detection**. When the `evidence_quality` score falls below 4/10, or when the justification mentions hallucinated evidence, the system flags the output. This provides an automated quality signal without requiring a separate hallucination classifier.
 
 ## 13.3 Stratified Evaluation Complexity
 
@@ -694,9 +723,11 @@ The following results are from seven benchmark rounds evaluating five model conf
 | Qwen3 (vanilla) | 0.76 | Pass | 7.0/10 | 9 | Partially | PASS | 13.1s |
 | Granite (vanilla) | 0.59 | Pass | 5.0/10 | 1 | Yes | FAIL | 9.8s |
 
-**Cross-Model RCA Eval Matrix (Run 7):**
+**Eval System Validation: Cross-Model Scoring Matrix (Run 7)**
 
-|  | Granite | Granite+LS | Gemini | Qwen3 | Qwen3+LS | **RCA Eval** |
+To validate that the eval model scoring approach produces reliable results, we ran a cross-model benchmark where each model evaluated every other model's output. This matrix is not the production evaluation mechanism (which uses a single external eval model), but it demonstrates that strong models produce consistent, discerning scores while weaker models are overly generous — validating the choice of eval model matters:
+
+|  | Granite | Granite+LS | Gemini | Qwen3 | Qwen3+LS | **Avg** |
 |--|---------|------------|--------|-------|----------|-------------|
 | **Granite** | -- | 4 | 5 | 5 | 6 | 5.0 |
 | **Granite+LS** | 8 | -- | 3 | 8 | 8 | 6.8 |
@@ -704,12 +735,14 @@ The following results are from seven benchmark rounds evaluating five model conf
 | **Qwen3** | 6 | 8 | 8 | -- | 6 | 7.0 |
 | **Qwen3+LS** | err | 10 | 6 | 8 | -- | **8.0** |
 
+This matrix informed the architecture decision: a strong eval model (such as the 80B Qwen3 or SaaS Gemini) reliably catches hallucinated evidence and unsupported claims, while a weak eval model (such as the 1B Granite) rates nearly everything highly. The production system uses a single strong eval model rather than a cross-model matrix.
+
 Key findings from the benchmark campaign:
 
 - **Two-tier scoring catches false positives.** Granite (vanilla) received RCA Detected: Pass by naming `bookinfo/reviews-v2:cpu_saturation`, but made only 1 tool call and hallucinated its evidence. Under the old single-tier deterministic scoring, it passed with 0.77. Under the two-tier system, its RCA Eval of 5.0/10 correctly dragged the weighted score to 0.59 (FAIL).
 - **RAG acts as an equalizer.** Granite + Lightspeed (1B active parameters on a single MIG slice) achieved 0.81 at 7.1s latency, approaching the 80B Qwen3's score of 0.76 without RAG. Documentation augmentation compensated for the model's smaller parametric knowledge.
 - **On-premises models can beat SaaS.** Both Lightspeed variants outperformed Gemini 3 Pro on speed (7-8s vs. 37s) while keeping all data on-premises. Gemini still led on RCA Eval (9.8/10) due to consistently identifying the stress-injector sidecar as the specific fault mechanism.
-- **Hallucination detection works.** The automated hallucination flag, derived from judge `evidence_quality` scores and justification text analysis, correctly identified models that fabricated Prometheus queries or cited metrics they never retrieved.
+- **Hallucination detection works.** The automated hallucination flag, derived from eval model `evidence_quality` scores and justification text analysis, correctly identified models that fabricated Prometheus queries or cited metrics they never retrieved.
 
 ---
 
@@ -744,7 +777,7 @@ Each scenario should have clear, unambiguous ground truth and produce observable
 
 ## 15.1 Industry AIOps Benchmarks
 
-The harness contract's open specification creates the foundation for **industry-standard AIOps benchmarks** analogous to MLPerf or the TPC benchmarks. The RCAEval benchmark [1] demonstrates the feasibility: 735 failure cases across 9 datasets revealed significant performance variation across methods. An industry AIOps benchmark would extend this to evaluating complete systems across all six scoring dimensions, including cross-model peer evaluation.
+The harness contract's open specification creates the foundation for **industry-standard AIOps benchmarks** analogous to MLPerf or the TPC benchmarks. The RCAEval benchmark [1] demonstrates the feasibility: 735 failure cases across 9 datasets revealed significant performance variation across methods. An industry AIOps benchmark would extend this to evaluating complete systems across all six scoring dimensions, including external eval model assessment.
 
 ## 15.2 Multi-Agent Operational Reasoning
 
@@ -769,13 +802,13 @@ AIOps can't succeed through models alone. Capability without governance produces
 The harness-first architecture addresses this with four pillars:
 
 - **Repeatable evaluation** through deterministic fault injection and versioned manifests. Same scenarios, comparable results across model updates.
-- **External governance** through separation of the AI system from its evaluation framework. Policy gates define remediation boundaries. The two-tier scoring system (deterministic gate + peer evaluation) establishes measurable standards that catch false positives a single-tier system would miss.
-- **Evidence-grounded reasoning** through tool-mediated retrieval that connects every conclusion to retrievable telemetry. Cross-model peer evaluation verifies that conclusions are actually supported by tool results, not hallucinated. Full tool-call logs create an audit trail.
+- **External governance** through separation of the AI system from its evaluation framework. Policy gates define remediation boundaries. The two-tier scoring system (deterministic gate + external eval model assessment) establishes measurable standards that catch false positives a single-tier system would miss.
+- **Evidence-grounded reasoning** through tool-mediated retrieval that connects every conclusion to retrievable telemetry. The external eval model verifies that conclusions are actually supported by tool results, not hallucinated. Full tool-call logs create an audit trail.
 - **Continuous improvement** through structured feedback loops. The maturity model provides a governed progression from observation to bounded autonomy, each stage justified by accumulated scores.
 
-These pillars aren't theoretical. Across seven benchmark rounds evaluating five model configurations, the architecture demonstrated that a 1B-parameter model augmented with curated documentation can approach the diagnostic accuracy of an 80B model, that deterministic keyword-matching scores produce false confidence when used alone, and that cross-model peer evaluation reliably identifies hallucinated evidence that would otherwise go undetected.
+These pillars aren't theoretical. Across seven benchmark rounds evaluating five model configurations, the architecture demonstrated that a 1B-parameter model augmented with curated documentation can approach the diagnostic accuracy of an 80B model, that deterministic keyword-matching scores produce false confidence when used alone, and that external eval model assessment reliably identifies hallucinated evidence that would otherwise go undetected.
 
-The architecture's framework-aware evaluation — inspecting Llama Stack telemetry to fact-check pipeline claims against real system data — catches errors that output-only evaluation misses. MLFlow serves as the central experiment tracking backbone, providing searchable, comparable records of every pipeline investigation and every harness evaluation. The dual-instance architecture (AIOps MLFlow for pipeline behavior, Harness MLFlow for evaluation results) maintains the External Independence Principle while enabling regression testing across model updates, prompt changes, and infrastructure changes. Alert-triggered detection with MTTD measurement bridges the gap between controlled benchmarking and production-ready incident response.
+The architecture's evaluation model — fact-checking pipeline claims using only the data the harness provides — catches errors that output-only evaluation misses. MLFlow serves as the central experiment tracking backbone, providing searchable, comparable records of every pipeline investigation and every harness evaluation. The dual-instance architecture (AIOps MLFlow for pipeline behavior, Harness MLFlow for evaluation results) maintains the External Independence Principle while enabling regression testing across model updates, prompt changes, and infrastructure changes. Alert-triggered detection with MTTD measurement bridges the gap between controlled benchmarking and production-ready incident response.
 
 This isn't an easy problem, and this type of approach takes constant evaluation and refinement as your models and infrastructure evolve. But in the end, the path to trustworthy AI operations starts with the same principle that guides any good engineering decision: you need data, not guesswork.
 
